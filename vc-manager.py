@@ -60,25 +60,30 @@ class VCManager:
   def __init__(self, argv):
     """Class constructor; pass the sys.argv as the parameter."""
 
-    if len(argv) < 2:
+    if len(argv) < 1:
       print self.__doc__
       sys.exit(0)
     
-    # use python introspection to call appropriate function based on command
-    for function in dir(VCManager):
-      # first look for single command functions
-      # e.g., command 'qstat' calls function 'qstat'
-      if argv[1] == function:
-        sys.exit( getattr(self, function)(argv[2:]) )
-      # then look for double command functions
-      # e.g., command 'add pool' calls function 'addPool'
-      elif len(argv) > 2:
-        arg_function = argv[1] + argv[2].capitalize()
+    # Use python introspection to call appropriate function based on command.
+    # First looks for single command functions (e.g., command 'qstat' calls
+    # function 'qstat').   Then looks for double command functions (e.g.,
+    # command 'add pool' calls function 'addPool') and then triple commands
+    # (e.g., toBeAdded)
+    for numwords in range(1,4):
+      if numwords > len(argv): # don't continue if we run out of args to try
+        break
+      # create a potential function name out of provided args
+      arg_function = argv[0];
+      for i in range(1, numwords):
+        arg_function = arg_function + argv[i].capitalize()
+      # look at functions in this class and look for a match
+      for function in dir(VCManager):
         if arg_function == function:
-          sys.exit( getattr(self, function)(argv[3:]) )
+          sys.exit( getattr(self, function)(argv[numwords:]) )
 
     # otherwise we error out
-    sys.stderr.write("Unknown command '" + " ".join(argv[1:]) + "'\n")
+    sys.stderr.write("Unknown command '" + " ".join(argv) + "'.  ")
+    sys.stderr.write("Re-run with 'help' for more information.\n")
     sys.exit(1)
        
 
@@ -101,4 +106,4 @@ class VCManager:
 
     print "table indicating virtual cluster status"
 
-VCManager(sys.argv)
+VCManager(sys.argv[1:]) # trim off program name
