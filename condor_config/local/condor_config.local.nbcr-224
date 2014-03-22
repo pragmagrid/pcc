@@ -1,0 +1,54 @@
+## Basic Configuration to join a condor pool
+
+ALLOW_WRITE = $(HOSTALLOW_WRITE)
+AMAZON_GAHP = $(SBIN)/amazon_gahp
+AMAZON_GAHP_LOG = /tmp/AmazonGahpLog.$(USERNAME)
+COLLECTOR_NAME = Collector at nbcr-224.ucsd.edu
+COLLECTOR_SOCKET_CACHE_SIZE = 1000
+CONDOR_ADMIN = condor@nbcr-224.ucsd.edu
+CONDOR_DEVELOPERS = NONE
+CONDOR_DEVELOPERS_COLLECTOR = NONE
+CONDOR_HOST = nbcr-224.ucsd.edu
+CONDOR_IDS = 407.407
+CONDOR_SSHD = /usr/sbin/sshd
+CONDOR_SSH_KEYGEN = /usr/bin/ssh-keygen
+CONTINUE = True
+DAEMON_LIST = MASTER, SCHEDD, COLLECTOR, NEGOTIATOR, STARTD
+EMAIL_DOMAIN = $(FULL_HOSTNAME)
+FILESYSTEM_DOMAIN = ucsd.edu
+HIGHPORT = 50000
+HOSTALLOW_WRITE = nbcr-224.ucsd.edu, *.local, *.local
+JAVA = /usr/java/latest/bin/java
+KILL = False
+LOCAL_DIR = /var/opt/condor
+LOCK = /tmp/condor-lock.$(HOSTNAME)
+LOWPORT = 40000
+MAIL = /bin/mail
+NEGOTIATOR_INTERVAL = 120
+NETWORK_INTERFACE = 169.228.41.224
+PREEMPT = False
+RANK = None
+RELEASE_DIR = /opt/condor
+SOAP_SSL_CA_FILE = /etc/pki/tls/cert.pem
+START = True
+STARTD_EXPRS = $(STARTD_EXPRS)
+SUSPEND = False
+UID_DOMAIN = local
+UPDATE_COLLECTOR_WITH_TCP = True
+WANT_SUSPEND = False
+WANT_VACATE = False
+
+## Add Rocks ClassAD Attributes.
+## The rocks_ad.sh script output a list of attributes, e.g.:
+## Rocks_VM_Container_NUM = 4
+## Rocks_Frontnode = nbcr-224.ucsd.edu
+## ...
+## The condor startd uses STARTD_CRON to periodically
+## update extended ClassAD attributes by using 
+## the following settings 
+## (once set, run "condor_reconfig -startd")
+
+ROCKSINFO = /opt/condor/bin/rocks_ad.sh
+STARTD_CRON_JOBLIST = $(STARTD_CRON_JOBLIST) ROCKSINFO
+STARTD_CRON_ROCKSINFO_EXECUTABLE = $(ROCKSINFO)
+STARTD_CRON_ROCKSINFO_PERIOD = 10
