@@ -38,6 +38,55 @@ UPDATE_COLLECTOR_WITH_TCP = True
 WANT_SUSPEND = False
 WANT_VACATE = False
 
+
+HasVM = True
+VM_AvailNum = 2
+VM_Memory = 256
+VM_Networking = True
+VM_Networking_Type = nat,bridge
+VM_GAHP_VERSION = 0.0.1
+VM_Type = rocks
+VM_GAHP_LOG = /var/opt/condor/log/VMGahpLog.$(USERNAME)
+
+
+
+##--------------------------------------------------------------------
+##  VM Universe Parameters Specific to Rocks VM
+##--------------------------------------------------------------------
+
+## Where is perl program? (Required)
+
+ROCKS_PERL = perl
+
+## Where is the Condor script program to control VMware? (Required)
+
+ROCKS_SCRIPT = $(SBIN)/condor_vm_rocks
+
+## Networking parameters for Rocks VM
+##
+## What kind of Rocks networking is used?
+##
+## If multiple networking types are defined, you may specify different
+## parameters for each networking type.
+##
+## Examples
+## (e.g.) ROCKS_NAT_NETWORKING_TYPE = nat
+## (e.g.) ROCKS_BRIDGE_NETWORKING_TYPE = bridged
+##
+##  If there is no parameter for specific networking type, ROCKS_NETWORKING_TYPE is used.
+##
+#ROCKS_NAT_NETWORKING_TYPE = nat
+#ROCKS_BRIDGE_NETWORKING_TYPE = bridged
+
+ROCKS_NETWORKING_TYPE = bridged
+
+## The contents of this file will be inserted into the .vmconf file of
+## the VMware virtual machine before Condor starts it.
+#ROCKS_LOCAL_SETTINGS_FILE = /path/to/file
+
+##--------------------------------------------------------------------
+##   Dynamic ClassAd
+##--------------------------------------------------------------------
 ## Add Rocks ClassAD Attributes.
 ## The rocks_ad.sh script output a list of attributes, e.g.:
 ## Rocks_VM_Container_NUM = 4
