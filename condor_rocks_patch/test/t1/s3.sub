@@ -1,0 +1,9 @@
+universe                     = vm
+executable                   = rocks_vm_1
+log                          = simple.vm.log.txt
+vm_type                      = rocks
+vm_memory                    = 64
+rocks_dir		   = /path/to/this/dir/
+RequestMemory = 64
+rocks_should_transfer_files = NO
+queue
