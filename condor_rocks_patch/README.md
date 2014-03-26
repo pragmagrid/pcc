@@ -1,6 +1,6 @@
 vc-manager
 ==========
-This condor patch enables condor to submit vm universe jobs via rocks.
+This condor patch enables condor to submit vm universe jobs via rocks. A sample submit script and configuration file can be found in the test directory.
 
 Note: the real rocks command (pragma_boot) is not integrated at this moment. The condor vm gahp calls a fake script that simulates rocks command. The VM status is manipulated by manually write job status to a file.
 

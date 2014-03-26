@@ -98,7 +98,7 @@ private:
 	bool m_rocks_transfer;
 	bool m_rocks_snapshot_disk;
 
-	MyString m_rocks_dir;
+	MyString m_rocks_job_dir;
 	MyString m_rocks_vmconf;
 	MyString m_rocks_img;
 };

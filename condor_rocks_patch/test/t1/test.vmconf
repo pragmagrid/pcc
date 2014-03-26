@@ -1,0 +1,6 @@
+#executable      = pragma_boot
+basepath        = /opt/pragma_boot/vm-images
+key             = ~/.ssh/id_rsa.pub
+num_cores       = 2
+vcname          = lifemapper
+#logfile         = pragma_boot.log

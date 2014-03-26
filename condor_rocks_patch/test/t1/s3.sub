@@ -1,9 +1,9 @@
 universe                     = vm
-executable                   = rocks_vm_1
-log                          = simple.vm.log.txt
+executable                   = lifemapper
+log                          = simple.condor.log
 vm_type                      = rocks
 vm_memory                    = 64
-rocks_dir		   = /path/to/this/dir/
+rocks_job_dir              = /home/yuanluo/condor/test/samples/s3
 RequestMemory = 64
 rocks_should_transfer_files = NO
 queue

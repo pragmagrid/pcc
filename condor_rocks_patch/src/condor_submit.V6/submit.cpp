@@ -8584,10 +8584,10 @@ SetVMParams()
 				"\"rocks_should_transfer_files = YES\" or "
 				" \"rocks_should_transfer_files = NO\". "
 				"If you define \"rocks_should_transfer_files = YES\", "
-				"vmconf and img files in the directory of \"rocks_dir\" "
+				"vmconf and img files in the directory of \"rocks_job_dir\" "
 				"will be transfered to an execute machine. "
 				"If you define \"rocks_should_transfer_files = NO\", "
-				"all files in the directory of \"rocks_dir\" should be "
+				"all files in the directory of \"rocks_job_dir\" should be "
 				"accessible with a shared file system\n";
 			print_wrapped_text( err_msg.Value(), stderr );
 			DoCleanup(0,0,NULL);
@@ -8635,17 +8635,17 @@ SetVMParams()
 				rocks_snapshot_disk? "TRUE" : "FALSE");
 		InsertJobExpr( buffer );
 
-		// rocks_dir is a directory that includes vmconf file and img files.
-		char *rocks_dir = NULL;
-		rocks_dir = condor_param("rocks_dir");
-		if ( rocks_dir ) {
-			MyString f_dirname = delete_quotation_marks(rocks_dir);
-			free(rocks_dir);
+		// rocks_job_dir is a directory that includes vmconf file and img files.
+		char *rocks_job_dir = NULL;
+		rocks_job_dir = condor_param("rocks_job_dir");
+		if ( rocks_job_dir ) {
+			MyString f_dirname = delete_quotation_marks(rocks_job_dir);
+			free(rocks_job_dir);
 
 			f_dirname = full_path(f_dirname.Value(), false);
 			check_and_universalize_path(f_dirname);
 
-			buffer.formatstr( "%s = \"%s\"", VMPARAM_ROCKS_DIR, f_dirname.Value());
+			buffer.formatstr( "%s = \"%s\"", VMPARAM_ROCKS_JOB_DIR, f_dirname.Value());
 			InsertJobExpr( buffer );
 
 			Directory dir( f_dirname.Value() );

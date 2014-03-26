@@ -2,8 +2,7 @@
 
 ##**************************************************************
 ##
-## Copyright (C) 1990-2007, Condor Team, Computer Sciences Department,
-## University of Wisconsin-Madison, WI.
+## Copyright (C) 2014, Data To Insight Center, Indiana University Bloomington.
 ## 
 ## Licensed under the Apache License, Version 2.0 (the "License"); you
 ## may not use this file except in compliance with the License.  You may
@@ -39,15 +38,10 @@ my $verbose = undef;
 my $vmrun_prog;
 my $rockscmd_prog;
 
-# For Linux
+# For rocks that using pragma_boot
 $vmrun_prog = 'pragma_boot';
 $rockscmd_prog = 'rocks';
 
-
-# Location of "mkisofs" program
-# If mkisofs program is in $PATH, just use basename. Otherwise use a full path
-my $mkisofs;
-$mkisofs = 'mkisofs';
 
 # stdout will be directed to stderr
 #open STDOUT, ">&STDERR" or die "Can't dup STDERR: $!";
@@ -59,13 +53,8 @@ open STDOUT, ">&STDERR";
 my $tmpdir = undef;
 my $progname = $0;
 
-#
-# Assume we're using Workstation or Player, but autodetect Server;
-# only Server has rockscmd.
-#
-my $ROCKS_VERSION = "pragma_boot";
 
-if( defined($verbose) ) { print( "Using \$ROCKS_VERSION '$ROCKS_VERSION'.\n" ); }
+if( defined($verbose) ) { print( "Using 'pragma_boot'.\n" ); }
 
 #
 # The behavior of vmrun isn't consistent from platform to platform, so we
@@ -73,26 +62,6 @@ if( defined($verbose) ) { print( "Using \$ROCKS_VERSION '$ROCKS_VERSION'.\n" ); 
 # that VMWare Server's implementation of vmrun dies if passed -T, so be
 # sure never to do that.
 #
-
-my @VMRUN_CMD = ($vmrun_prog);
-while( $ROCKS_VERSION eq 'pragma_boot' ) {
-    my $wsList = `"$vmrun_prog" -T ws list`;
-    if( $wsList =~ m/^Total running VMs:/ ) {
-	push( @VMRUN_CMD, '-T', 'ws' );
-        last;
-    }
-    
-    my $playerList = `"$vmrun_prog" -T player list`;
-    if( $playerList =~ m/^Total running VMs:/ ) {
-	push( @VMRUN_CMD, '-T', 'player' );
-        last;
-    }
-    
-    last;
-}
-
-my $VMRUNCMD = '"' . join( '"  "', @VMRUN_CMD ) . '"';
-if( defined($verbose) ) { print( "Using \$VMRUNCMD '$VMRUNCMD'.\n" ); }
 
 sub usage()
 {
@@ -175,12 +144,7 @@ sub checkvmconfig
 
 sub checkregister
 {
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		# return true
-		return 1;
-	}
-	else {
-		my $vmconfig = $_[0];
+		my $vcname = $_[0];
 	
 		chomp(my @vmstatus = `"$rockscmd_prog" -l`);
 		# result must be like this
@@ -190,7 +154,7 @@ sub checkregister
 		foreach( @vmstatus ) {
 			# delete leading/trailing whitespace
 			s/^\s+|\s+$//g;
-			if( $_ eq $vmconfig ) {
+			if( $_ eq $vcname ) {
 				# this vm is already registered
 				# return true
 				return 1;
@@ -199,85 +163,60 @@ sub checkregister
 	
 	# return false
 	return 0;
-	}
 }
 
+#List all running VMs
+#arguments: 1) --list
 sub list
 {
-#list                           List all running VMs
-	!system @VMRUN_CMD, "list"
-		or printerror "Can't execute the command: '$vmrun_prog' list";
+
+	!system $vmrun_prog, "--list"
+		or printerror "Can't execute the command: '$rockscmd_prog' --list";
 }
 
+#Check if rocks command line tools are installed
 sub check
 {
-#check       [vmconfig]         Check if vmware command line tools are installed
-	!system @VMRUN_CMD, "list"
+
+	!system $vmrun_prog, "--list"
 		or printerror "Can't execute $vmrun_prog";
 
-	if ($ROCKS_VERSION ne "pragma_boot") {
-		!system $rockscmd_prog, "-l"
-			or printerror  "Can't execute $rockscmd_prog";
-	}
-
-	!system $mkisofs, "-version"
-		or printerror "Can't execute $mkisofs";
+	!system $rockscmd_prog
+		or printerror "Can't execute $rockscmd_prog";
 }
 
 sub register
 {
-#register    [vmconfig]         Register a VM
-	if ($ROCKS_VERSION ne "pragma_boot") {
-		printverbose "register is called";
-		my $vmconfig = checkvmconfig($_[0]);
-		if( ! checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "register", $vmconfig
-			#	or printerror "Can't register a vm($vmconfig)";
-			system $rockscmd_prog, "-s", "register", $vmconfig;
-		}
-	}
+
 }
 
 sub unregister
 {
-#unregister    [vmconfig]         Unregister a VM
-	if ($ROCKS_VERSION ne "pragma_boot") {
-		printverbose "unregister is called";
-		my $vmconfig = checkvmconfig($_[0]);
-		#if( checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "unregister", $vmconfig
-			#	or printerror "Can't unregister a vm($vmconfig)";
-		#}
-		system $rockscmd_prog, "-s", "unregister", $vmconfig;
-	}
+
 }
 
 sub getvmpid
 {
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		return 0;
-	} 
-    
-	else {	
-		my $vmconfig = $_[0];
+	
+	my $vmconfig = $_[0];
 
-		my $resultline = `"$rockscmd_prog" "$vmconfig" getpid`;
-		chomp($resultline);
-		if( ! $resultline ) {
-			printerror "Can't execute getpid of a vm($vmconfig)";
-		}
-
-		# result must be like "getpid() = 18690"
-		my @fields = split /=/, $resultline;
-		shift @fields;
-		my $pid_field = shift @fields;
-		if( ! defined($pid_field) ) {
-			printerror "Invalid format of getpid($resultline)";
-		}
-		# delete leading/trailing whitespace
-		$pid_field =~ s/^\s+|\s+$//g;
-		return $pid_field;
+	my $resultline = `"$rockscmd_prog" "$vmconfig" getpid`;
+	chomp($resultline);
+	if( ! $resultline ) {
+		printerror "Can't execute getpid of a vm($vmconfig)";
 	}
+
+	# result must be like "getpid() = 18690"
+	my @fields = split /=/, $resultline;
+	shift @fields;
+	my $pid_field = shift @fields;
+	if( ! defined($pid_field) ) {
+		printerror "Invalid format of getpid($resultline)";
+	}
+	# delete leading/trailing whitespace
+	$pid_field =~ s/^\s+|\s+$//g;
+	return $pid_field;
+
 }
 
 sub status
@@ -293,43 +232,7 @@ sub status
 	}
 
 	my $output_status = "Stopped";	# default status
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		# Just check to see if $vmconfig is listed in the output
-		my @vmstatus =  `${VMRUNCMD} list`;
-		foreach my $i (@vmstatus) {	
-			# delete newline
-			chomp($i);
-			if( $i eq $vmconfig ) {
-				$output_status = "Running";
-			}
-		}
-	}
 
-	else {
-	#if( checkregister($vmconfig) ) {
-		my $vmstatus = `"$rockscmd_prog" "$vmconfig" getstate`;
-		chomp($vmstatus);
-		if( ! $vmstatus ) {
-			printerror "Can't execute getstate of a vm($vmconfig)";
-		}
-
-		# result must be like "getstate() = on"
-		my @fields = split /=/, $vmstatus;
-		shift @fields;
-		my $status_field = shift @fields;
-		if( ! defined($status_field) ) {
-			printerror "Invalid format of getstate($vmstatus)";
-		}
-		# delete leading/trailing whitespace
-		$status_field =~ s/^\s+|\s+$//g;
-		$status_field = lc($status_field);
-		$output_status = 
-		( $status_field eq "on") ? "Running" :
-		( $status_field eq "suspended") ? "Suspended" :
-		( $status_field eq "off") ? "Stopped":
-		"Error";	# default value
-	#}
-	}
 	
 	# [PRAGMA] Query the fake status by extracting the first line of a file
 	open (FOO, "/opt/condor/sbin/status.txt") || die "ERROR Unable to open /opt/condor/sbin/status.txt: $!\n";
@@ -343,7 +246,7 @@ sub status
 			print OUTPUT "PID=$vmpid\n";
 		}
 	}
-	
+	print OUTPUT "Query Status: $output_status\n";
 	return $output_status;
 }
 
@@ -354,12 +257,6 @@ sub pidofvm
 	my $vmconfig = checkvmconfig($_[0]);
 
 	# Get status
-	if ($ROCKS_VERSION ne "pragma_boot") {
-		my $vmstatus = status($vmconfig);
-		if( $vmstatus ne "Running" ) {
-			printerror "vm($vmconfig) is not running";
-		}
-	}
 
 	# Get pid of main process of this VM
 	my $vmpid = getvmpid($vmconfig);
@@ -368,26 +265,8 @@ sub pidofvm
 
 sub getvminfo
 {
-#getvminfo     [vmconfig]         Print info about VM
-	printverbose "getvminfo is called";
-	my $vmconfig = checkvmconfig($_[0]);
+	print OUTPUT "FIXME:GET_VM_INFO\n";
 
-	# Get status
-	my $vmstatus = status($vmconfig, 1);
-
-	if( $vmstatus ne "Running" ) {
-		return;
-	}
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		return;
-	}
-
-	else {
-		# TODO: Get mac address of VM, static for now
-		my $mac_address="00:0c:29:cb:40:bb";
-		print OUTPUT "MAC=$mac_address\n";
-	}
 }
 
 sub start
@@ -397,307 +276,92 @@ sub start
 
 	my $vmconfig = checkvmconfig($_[0]);
 
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		!system @VMRUN_CMD, "start", $vmconfig, "nogui"
-			or printerror "Can't create vm with $vmconfig";
-	}else {
-		if( ! checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "register", $vmconfig
-			#	or printerror "Can't register a new vm with $vmconfig";
-			system $rockscmd_prog, "-s", "register", $vmconfig;
-		}
+	open FILE1, $vmconfig or die;
+	my %hash;
+	while (my $line=<FILE1>) {
+	   chomp($line);
+	   next if /^\s*(#.*)?$line/;
+	   (my $key,my $value) = split /=/, $line;
+	   $key =~ s/^\s+|\s+$//g;
+	   $value =~ s/^\s+|\s+$//g;
+	   $hash{$key} = $value;
+	}
+	
+	my $command_start=$vmrun_prog;
+	
+	$command_start = join " ",
+                $command_start,
+                "--basepath $hash{basepath}",
+                "--num_cpus $hash{num_cores}",
+                "--key $hash{key}",
+                "--vcname $hash{vcname}",
+                ">";
+	if (exists $hash{logfile}){
+	        $command_start = join " ", $command_start, $hash{logfile};
+	}else{
+	        $command_start = join " ", $command_start, "pragma_boot.log";
+	}
+	$command_start = join " ", $command_start, "2>&1";
 
-		# Now, a new vm is registered
-		# Try to create a new vm
-		!system $rockscmd_prog, $vmconfig, "start", "trysoft"
-			or printerror "Can't create vm with $vmconfig";
-    }
 
-    sleep(5);
+	print OUTPUT $command_start, "\n";
+
+	!system $command_start
+		or printerror "Can't create vm with $vmconfig";
+
 	# Get pid of main process of this VM
-	my $vmpid = getvmpid($vmconfig);
-	print OUTPUT "PID=$vmpid\n";
-
+	#my $vmpid = getvmpid($vmconfig);
+	#print OUTPUT "PID=$vmpid\n";
+	print OUTPUT "PID=0\n";
 }
 
 sub stop
 {
-#stop        [vmconfig]         Shutdown a VM
+#Shutdown a VM
 	printverbose "stop is called";
 	my $vmconfig = checkvmconfig($_[0]);
 
-	if ($ROCKS_VERSION eq "pragma_boot") {
+	# Get status
+	my $vmstatus = status($vmconfig);
+	if( $vmstatus eq "Running" ) {
 		# Try to stop vm
-		!system @VMRUN_CMD, "stop", $vmconfig, "hard"
-		    or printerror "Can't stop vm with $vmconfig";
+		!system $rockscmd_prog, "stop cluster" #FIXME
+			or printerror "Can't stop vm with $vmconfig";
+
 		sleep(2);
-	}	  
-
-	else {
-		# Get status
-		my $vmstatus = status($vmconfig);
-		if( $vmstatus eq "Running" ) {
-			# Try to stop vm
-			!system $rockscmd_prog, $vmconfig, "stop", "hard"
-				or printerror "Can't stop vm with $vmconfig";
-
-			sleep(2);
-		}
-	        unregister($vmconfig);
 	}
 }
 
 sub killvm
 {
-#killvm        [vmconfig]         kill a VM
-	printverbose "killvm is called";
-	my $matchstring = $_[0];
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		#
-		# Rather than error out and cause ugly warnings in the log,
-		# we'd like to try stopping the VM again.  Unfortunately,
-		# the starter has already removed the execute directory by
-		# the time it calls VMwareType::killVMFast(), so we don't
-		# have a .vmx to pass to vmrun any longer.  (The .vmx must
-		# exist; we can't just pass the path.)
-		#
-
-        my $processList = `ps uxw`;
-        my @processes = split( /\n/, $processList );
-        foreach my $process (@processes) {
-            if( $process =~ m/vmware-vmx.*$matchstring/ ) {
-                my( $user, $pid ) = split( /\s+/, $process );
-                printwarn( "Found '$process', trying to kill...\n" );
-                my $numSignalled = kill( 9, $pid );
-                if( $numSignalled < 1 ) {
-                    printerror( "Failed to signal process '$process'.\n" );
-                } else {
-                    printwarn( "Sent signal to process '$process'.\n" );
-                    # Otherwise, the VM GAHP won't log the warnings.  Change
-                    # back to zero once this problem is corrected.
-                    exit 1;
-                }
-            }
-        }
-        printwarn( "Found no process matching '$matchstring', assuming succesful prior termination." );
-        exit( 0 );
-	}
-
-	if( ! defined($matchstring) ) {
-		usage();
-	}
-
-	printverbose "matching string is '$matchstring'";
-
-	my $os = $^O;
-
-	# Get the list of registered VMs
-	chomp(my @vmstatus = `"$rockscmd_prog" -l`);
-	# result must be like this
-	# /home/condor/rocks/Centos.vmconf
-	# /home/condor/rocks/Centos2.vmconf
-
-	my $ori_line;
-	foreach( @vmstatus ) { 
-		# delete leading/trailing whitespace
-		s/^\s+|\s+$//g;
-
-		$ori_line = $_;
-		if( $_ =~ m{$matchstring} ) {
-			# this registed vm is matched
-			# Get pid of this vm 	
-			my $vmpid = getvmpid($ori_line);
-
-			if( defined($vmpid) ) {
-				printverbose "Killing process(pid=$vmpid)";
-				kill "KILL", $vmpid;
-			}
-
-			!system $rockscmd_prog, "-s", "unregister", $ori_line
-				or printwarn "Can't unregister a vm($ori_line)";
-		}
-	}
-
-	if (lc($os) eq "linux") {
-		# On Linux machines, we make certain no process for VM again.
-		my @pidarr;
-		my $psline;
-		my @psarr = `ps -ef`;
-		foreach $psline (@psarr)
-		{
-			if( $psline =~ m{$matchstring} && $psline =~ m/vmware-vmx/i && $psline !~ m{$0})
-			{
-				@pidarr = split (/ +/, $psline);
-				if( defined($pidarr[1]) ) {
-					printverbose "Killing process(pid=$pidarr[1])";
-					kill 9, $pidarr[1];
-				}
-			}
-		}
-	}
+#FIXME
 }
 
 sub suspend
 {
-#suspend     [vmconfig]         Suspend a VM
+#Suspend a VM
 	printverbose "suspend is called";
 	my $vmconfig = checkvmconfig($_[0]);
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		!system @VMRUN_CMD, "suspend", $vmconfig, "soft"
-			or printerror "Can't suspend vm with $vmconfig";
-	}
-	else {
-		# Get status
-		my $vmstatus = status($vmconfig);
-		if( $vmstatus ne "Running" ) {
-			printerror "vm($vmconfig) is not running";
-		}
-
-		!system $rockscmd_prog, $vmconfig, "suspend", "trysoft"
-			or printerror "Can't suspend vm with $vmconfig";
-	}
-
-	# We need to guarantee all memory data into a file
-	# VMware does some part of suspending in background mode
-	# So, we give some time to VMware
-	sleep(5);
 }
 
 sub resume
 {
-#resume      [vmconfig]         Restore a suspended VM
-	printverbose "resume is called";
-	my $vmconfig = checkvmconfig($_[0]);
-
-	# Get status
-	my $vmstatus = status($vmconfig);
-	if( $vmstatus ne "Running" ) {
-		start($vmconfig);
-	}
 }
 
 sub snapshot
 {
-#snapshot    [vmconfig]         Create a snapshot of a VM
-	printverbose "snapshot is called";
-	my $vmconfig = checkvmconfig($_[0]);
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		!system @VMRUN_CMD, "snapshot", $vmconfig, "condor-snapshot"
-			or printerror "Can't create snapshot for vm($vmconfig)";	
-	}
-	else {
-		if( ! checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "register", $vmconfig
-			#	or printerror "Can't register a vm with $vmconfig";
-			system $rockscmd_prog, "-s", "register", $vmconfig;
-		}
-
-		!system $vmrun_prog, "snapshot", $vmconfig
-			or printerror "Can't create snapshot for vm($vmconfig)";
-	}
-
-	sleep(1);
 }
 
 sub commit
 {
-#commit      [vmconfig]         Commit COW disks and delete the COW
-	printverbose "commit is called";
-	my $vmconfig = checkvmconfig($_[0]);
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		!system @VMRUN_CMD, "deleteSnapshot", $vmconfig, "condor-snapshot"
-			or printerror "Can't combine snapshot disk with base disk for vm($vmconfig)";
-	}
-	else {
-		if( ! checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "register", $vmconfig
-			#	or printerror "Can't register a vm with $vmconfig";
-			system $rockscmd_prog, "-s", "register", $vmconfig;
-		}
-
-		!system $vmrun_prog, "deleteSnapshot", $vmconfig
-			or printerror "Can't combine snapshot disk with base disk for vm($vmconfig)";
-	}
-
-	sleep(5);
 }
 
 sub revert
 {
-#revert      [vmconfig]         Set VM state to a snapshot
-	printverbose "revert is called";
-	my $vmconfig = checkvmconfig($_[0]);
-
-	if ($ROCKS_VERSION eq "pragma_boot") {
-		!system @VMRUN_CMD, "revertToSnapshot", $vmconfig, "condor-snapshot"
-			or printerror "Can't revert VM state to a snapshot for vm($vmconfig)";
-	}
-	else {
-		if( ! checkregister($vmconfig) ) {
-			#!system $rockscmd_prog, "-s", "register", $vmconfig
-			#	or printerror "Can't register a vm with $vmconfig";
-			system $rockscmd_prog, "-s", "register", $vmconfig;
-		}
-
-		!system $vmrun_prog, "revertToSnapshot", $vmconfig
-			or printerror "Can't revert VM state to a snapshot for vm($vmconfig)";
-	}
-
-	sleep(5);
 }
 
 sub createiso
 {
-#createiso   [listfile] [ISO]   Create an ISO image with files in a listfile
-	printverbose "createiso is called";
-
-	my $isoconfig = $_[0];
-	my $isofile = $_[1];
-
-	if( ! defined($isofile) || ! defined($isoconfig)) {
-		usage();
-	}
-
-	unless( -e $isoconfig ) {
-		printerror "File($isoconfig) does not exist";
-	}
-
-	unless( -r $isoconfig ) {
-		printerror "File($isoconfig) is not readable";
-	}
-
-	# Create temporary directory
-	$tmpdir = $isofile.".dir";
-	mkdir("$tmpdir") || printerror "Cannot mkdir newdir";
-
-	# Read config file
-	open(ISOFILES, "$isoconfig") 
-		or printerror "Cannot open the file($isoconfig) : $!";
-
-	# Copy all files in config into the temporary directory 
-	while( <ISOFILES> ) {
-		chomp;
-		if( $_ ) {
-			copy( "$_", "$tmpdir")
-				or printerror "Cannot copy file($_) into directory($tmpdir) : $!";
-		}
-	}
-	close ISOFILES;
-
-	my $cdlabel = "CONDOR";
-
-	# Using volume ID, application Label, Joliet
-	!system $mkisofs, "-quiet", "-o", $isofile, "-input-charset", "iso8859-1", "-J", "-A", $cdlabel, "-V", $cdlabel, $tmpdir
-		or printerror "Cannot create an ISO file($isofile)";
-
-	rmtree("$tmpdir")
-		or printwarn "Cannot delete temporary directory($tmpdir) and files in it";
-
-	sleep(1);
 }
 
 sub createconfig {}

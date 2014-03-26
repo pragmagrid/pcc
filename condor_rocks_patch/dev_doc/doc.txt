@@ -1,0 +1,27 @@
+change parameter rocks_dir to rocks_job_dir:
+
+condor_includes/condor_vm_universe_types.h (2 matches)
+88: #define VMPARAM_ROCKS_JOB_DIR   "VMPARAM_Rocks_JoB_Dir" 
+
+condor_submit.V6/submit.cpp (10 matches)
+8,587: "vmconf and img files in the directory of \"rocks_job_dir\" " 
+8,590: "all files in the directory of \"rocks_job_dir\" should be " 
+8,638: // rocks_job_dir is a directory that includes vmconf file and img files. 
+8,639: char *rocks_job_dir = NULL; 
+8,640: rocks_job_dir = condor_param("rocks_job_dir"); 
+8,641: if ( rocks_job_dir ) { 
+8,642: MyString f_dirname = delete_quotation_marks(rocks_job_dir); 
+8,643: free(rocks_job_dir); 
+8,648: buffer.formatstr( "%s = \"%s\"", VMPARAM_ROCKS_JOB_DIR, f_dirname.Value()); 
+
+condor_vm-gahp/rocks_type.cpp (5 matches)
+980: m_rocks_job_dir = ""; 
+981: m_classAd.LookupString(VMPARAM_ROCKS_JOB_DIR, m_rocks_job_dir); 
+982: m_rocks_job_dir.trim(); 
+1,060: if( readVMCONFfile(ori_vmconf_file.Value(), m_rocks_job_dir.Value()) 
+
+condor_vm-gahp/rocks_type.h
+101: MyString m_rocks_job_dir; 
+
+condor_vm-gahp/vmgahp_error_codes.h (2 matches)
+95: #define VMGAHP_ERR_JOBCLASSAD_NO_ROCKS_JOB_DIR_PARAM "VMGAHP_ERR_JOBCLASSAD_NO_ROCKS_JOB_DIR_PARAM" 

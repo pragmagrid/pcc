@@ -85,7 +85,7 @@
 /* ClassAd Attributes for Rocks */
 #define VMPARAM_ROCKS_TRANSFER		"VMPARAM_Rocks_Transfer"
 #define VMPARAM_ROCKS_SNAPSHOTDISK	"VMPARAM_Rocks_SnapshotDisk"
-#define VMPARAM_ROCKS_DIR			"VMPARAM_Rocks_Dir"
+#define VMPARAM_ROCKS_JOB_DIR			"VMPARAM_Rocks_Job_Dir"
 #define VMPARAM_ROCKS_VMCONF_FILE	"VMPARAM_Rocks_VMCONF_File"
 #define VMPARAM_ROCKS_IMG_FILES		"VMPARAM_Rocks_IMG_Files"
 

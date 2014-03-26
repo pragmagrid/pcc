@@ -1,0 +1,11 @@
+#!/bin/sh
+
+for i; do
+    echo $i
+ done
+
+for i in {1..20}
+do
+        sleep 30
+        /bin/date
+done

@@ -49,8 +49,8 @@
 #include "../condor_privsep/condor_privsep.h"
 
 #define ROCKS_TMP_FILE "rocks_status.condor"
-#define ROCKS_TMP_TEMPLATE		"rocks_vm_XXXXXX"
-#define ROCKS_TMP_CONFIG_SUFFIX	"_condor.vmconf"
+//#define ROCKS_TMP_TEMPLATE		"rocks_vm_XXXXXX"
+//#define ROCKS_TMP_CONFIG_SUFFIX	"_condor.vmconf"
 #define ROCKS_VMCONF_FILE_PERM	0770
 #define ROCKS_IMG_FILE_PERM	0660
 
@@ -147,6 +147,7 @@ RocksType::deleteLockFiles()
 bool 
 RocksType::findCkptConfig(MyString &vmconfig)
 {
+/*
 	if( m_transfer_intermediate_files.isEmpty()) {
 		return false;
 	}
@@ -175,6 +176,8 @@ RocksType::findCkptConfig(MyString &vmconfig)
 		}
 	}
 	return false;
+*/
+	return true;
 }
 
 bool 
@@ -224,6 +227,10 @@ static bool starts_with_ignore_case(const char * str, const char * pre)
 bool
 RocksType::readVMCONFfile(const char *filename, const char *dirpath)
 {
+	//We are not creating new config file,
+	//so it's not necessary to read the vmconf file
+	//and put the content into the new config file.
+
 	return true;
 
 }
@@ -958,7 +965,9 @@ RocksType::getPIDofVM(int &vm_pid)
 bool
 RocksType::CreateConfigFile()
 {
-	MyString tmp_config_name;
+/*
+
+ 	MyString tmp_config_name;
 
 	m_result_msg = "";
 
@@ -977,9 +986,9 @@ RocksType::CreateConfigFile()
 	m_classAd.LookupBool(VMPARAM_ROCKS_SNAPSHOTDISK, m_rocks_snapshot_disk);
 
 	// Read the directory where rocks files are on a submit machine
-	m_rocks_dir = "";
-	m_classAd.LookupString(VMPARAM_ROCKS_DIR, m_rocks_dir);
-	m_rocks_dir.trim();
+	m_rocks_job_dir = "";
+	m_classAd.LookupString(VMPARAM_ROCKS_JOB_DIR, m_rocks_job_dir);
+	m_rocks_job_dir.trim();
 
 	// Read the parameter of rocks vmconf file
 	if( m_classAd.LookupString(VMPARAM_ROCKS_VMCONF_FILE, m_rocks_vmconf) != 1 ) {
@@ -1057,7 +1066,7 @@ RocksType::CreateConfigFile()
 	ori_vmconf_file.formatstr("%s%c%s",m_workingpath.Value(),
 			DIR_DELIM_CHAR, m_rocks_vmconf.Value());
 
-	if( readVMCONFfile(ori_vmconf_file.Value(), m_rocks_dir.Value())
+	if( readVMCONFfile(ori_vmconf_file.Value(), m_rocks_job_dir.Value())
 			== false ) {
 		IGNORE_RETURN unlink(tmp_config_name.Value());
 		return false;
@@ -1176,9 +1185,27 @@ RocksType::CreateConfigFile()
 			return false;
 		}
 	}
+*/
 
-	// set vm config file
-	m_configfile = tmp_config_name;
+	// Read the parameter of rocks vmconf file
+		if( m_classAd.LookupString(VMPARAM_ROCKS_VMCONF_FILE, m_rocks_vmconf) != 1 ) {
+			vmprintf(D_ALWAYS, "%s cannot be found in job classAd\n",
+								VMPARAM_ROCKS_VMCONF_FILE);
+			m_result_msg = VMGAHP_ERR_JOBCLASSAD_NO_ROCKS_VMCONF_PARAM;
+			return false;
+		}
+		m_rocks_vmconf.trim();
+
+	// Change vmconf file permission
+	int retval = chmod(m_rocks_vmconf.Value(), ROCKS_VMCONF_FILE_PERM);
+	if( retval < 0 ) {
+		vmprintf(D_ALWAYS, "Failed to chmod %s in "
+				"RocksType::CreateConfigFile()\n", m_rocks_vmconf.Value());
+		m_result_msg = VMGAHP_ERR_INTERNAL;
+		return false;
+	}
+	//We are not appending any parameters to the configfile, but use the original rocks vmconf instead.
+	m_configfile=m_rocks_vmconf;
 	return true;
 }
 
