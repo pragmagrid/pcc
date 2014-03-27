@@ -42,6 +42,8 @@ my $rockscmd_prog;
 $vmrun_prog = 'pragma_boot';
 $rockscmd_prog = 'rocks';
 
+my $vminfofile = "vm.info";
+my $perllog = "condor_vm_rocks.log";
 
 # stdout will be directed to stderr
 #open STDOUT, ">&STDERR" or die "Can't dup STDERR: $!";
@@ -195,28 +197,35 @@ sub unregister
 
 }
 
+sub fprint
+{
+	open(my $fh, '>>', $perllog) or die "Could not open $perllog";
+	print $fh $_[0], "\n";
+	close $fh;
+}
+
 sub getvmpid
 {
+	fprint("Get vcname from $vminfofile");
 	
-	my $vmconfig = $_[0];
-
-	my $resultline = `"$rockscmd_prog" "$vmconfig" getpid`;
-	chomp($resultline);
-	if( ! $resultline ) {
-		printerror "Can't execute getpid of a vm($vmconfig)";
+	open INFO,  $vminfofile or die;
+	my $frontend="";
+	while (my $infoline=<INFO>) {
+   		chomp($infoline);
+   		(my $k,my $v) = split /=/, $infoline;
+   		$k =~ s/^\s+|\s+$//g;
+   		$v =~ s/^\s+|\s+$//g;
+   		if($k eq "Frontend"){
+			$frontend=$v;
+		}
+		next;
 	}
-
-	# result must be like "getpid() = 18690"
-	my @fields = split /=/, $resultline;
-	shift @fields;
-	my $pid_field = shift @fields;
-	if( ! defined($pid_field) ) {
-		printerror "Invalid format of getpid($resultline)";
-	}
-	# delete leading/trailing whitespace
-	$pid_field =~ s/^\s+|\s+$//g;
-	return $pid_field;
-
+	my $psout=`/bin/ps -ef|grep $frontend | grep -v grep`;
+	chomp($psout);
+	my $pid = "";
+	$pid=(split( /\s+/, $psout))[1];
+	fprint("getpid: PID=$pid\n");
+	return $pid;
 }
 
 sub status
@@ -234,19 +243,17 @@ sub status
 	my $output_status = "Stopped";	# default status
 
 	
-	# [PRAGMA] Query the fake status by extracting the first line of a file
-	open (FOO, "/opt/condor/sbin/status.txt") || die "ERROR Unable to open /opt/condor/sbin/status.txt: $!\n";
-	my $output_status = <FOO>;
-	
+	my $vmpid = getvmpid($vmconfig);
+
 	
 	if( defined($print_result) ) {
-		print OUTPUT "STATUS=$output_status\n";
-		if( $output_status eq "Running") {
-			my $vmpid = getvmpid($vmconfig);
+		if( $vmpid ne "") {
+			$output_status="Running";
+			print OUTPUT "STATUS=$output_status\n";	
 			print OUTPUT "PID=$vmpid\n";
 		}
+		print OUTPUT "STATUS=$output_status\n";
 	}
-	print OUTPUT "Query Status: $output_status\n";
 	return $output_status;
 }
 
@@ -303,16 +310,59 @@ sub start
 	}
 	$command_start = join " ", $command_start, "2>&1";
 
-
-	print OUTPUT $command_start, "\n";
-
 	!system $command_start
 		or printerror "Can't create vm with $vmconfig";
 
-	# Get pid of main process of this VM
-	#my $vmpid = getvmpid($vmconfig);
-	#print OUTPUT "PID=$vmpid\n";
-	print OUTPUT "PID=0\n";
+if (exists $hash{logfile}){
+        open LOG,  $hash{logfile} or die;
+}else{
+        open LOG,  "pragma_boot.log" or die;
+}
+
+my $frontend="";
+my $compute="";
+while (my $logline=<LOG>) {
+   chomp($logline);
+   if($logline =~ /created frontend VM/){
+        (my $k1,my $v1) = split /:/, $logline;
+        $v1 =~ s/^\s+|\s+$//g;
+        $frontend=$v1;
+   }
+   if($logline =~ /created compute VM/){
+        (my $k2,my $v2) = split /:/, $logline;
+        $v2 =~ s/^\s+|\s+$//g;
+        if($compute eq ""){
+                $compute=$v2;
+        }else{
+                $compute=join ",", $compute, $v2;
+        }
+   }
+   next
+}
+
+print OUTPUT "Frontend=$frontend", "\n";
+print OUTPUT "Compute=$compute", "\n";
+
+print "Frontend=$frontend", "\n";
+print "Compute=$compute", "\n";
+
+fprint("Frontend=$frontend");
+fprint("Compute=$compute");
+
+close LOG;
+
+
+my $psout=`/bin/ps -ef|grep $frontend | grep -v grep`;
+chomp($psout);
+my $pid = (split( /\s+/, $psout))[1];
+print OUTPUT "PID=$pid\n";
+
+open(my $fh, '>', $vminfofile) or die "Could not open file '$vminfofile' $!";
+print $fh "Frontend=$frontend", "\n";
+print $fh "Compute=$compute", "\n";
+print $fh "PID=$pid\n";
+close $fh;
+
 }
 
 sub stop
