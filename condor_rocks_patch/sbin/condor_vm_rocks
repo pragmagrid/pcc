@@ -318,60 +318,6 @@ sub start
 		$logfile="pragma_boot.log";
 	}
 
-<<<<<<< HEAD
-	!system $command_start
-		or printerror "Can't create vm with $vmconfig";
-	
-	if (exists $hash{logfile}){
-	        open LOG,  $hash{logfile} or die;
-	}else{
-	        open LOG,  "pragma_boot.log" or die;
-	}
-	
-	my $frontend="";
-	my $compute="";
-	while (my $logline=<LOG>) {
-	   chomp($logline);
-	   if($logline =~ /created frontend VM/){
-	        (my $k1,my $v1) = split /:/, $logline;
-	        $v1 =~ s/^\s+|\s+$//g;
-	        $frontend=$v1;
-	   }
-	   if($logline =~ /created compute VM/){
-	        (my $k2,my $v2) = split /:/, $logline;
-	        $v2 =~ s/^\s+|\s+$//g;
-	        if($compute eq ""){
-	                $compute=$v2;
-	        }else{
-	                $compute=join ",", $compute, $v2;
-	        }
-	   }
-	   next
-	}
-	
-	print OUTPUT "Frontend=$frontend", "\n";
-	print OUTPUT "Compute=$compute", "\n";
-	
-	print "Frontend=$frontend", "\n";
-	print "Compute=$compute", "\n";
-	
-	fprint("Frontend=$frontend");
-	fprint("Compute=$compute");
-	
-	close LOG;
-	
-	
-	my $psout=`/bin/ps -ef|grep $frontend | grep -v grep`;
-	chomp($psout);
-	my $pid = (split( /\s+/, $psout))[1];
-	print OUTPUT "PID=$pid\n";
-	
-	open(my $fh, '>', $vminfofile) or die "Could not open file '$vminfofile' $!";
-	print $fh "Frontend=$frontend", "\n";
-	print $fh "Compute=$compute", "\n";
-	print $fh "PID=$pid\n";
-	close $fh;
-=======
 #	$command_start = join " ", $command_start, ">", $logfile;
 #	$command_start = join " ", $command_start, ">", "2>&1";
 #
@@ -427,7 +373,6 @@ print $fh "Frontend=$frontend", "\n";
 print $fh "Compute=$compute", "\n";
 print $fh "PID=$pid\n";
 close $fh;
->>>>>>> use ssh for non-root user (condor restriction) to execute pragma_boot that requires root access
 
 }
 
