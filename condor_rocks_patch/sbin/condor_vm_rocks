@@ -361,9 +361,9 @@ sub start
 ## and `cat` that log file so that ssh command can return the cat results.
 ## I wanted to name the remote log file differently. 
 ## But I was wrong, the pragma_boot actually has a fixed log file: pragma_boot.log
-#	my $millisec=`date +%s.%N`;
-#	$millisec =~ s/^\s+|\s+$//g;
-#	my $remotelog = join ".",$logfile, $millisec;
+	my $millisec=`date +%s.%N`;
+	$millisec =~ s/^\s+|\s+$//g;
+	my $remotedir = "/tmp/".$millisec;
 #	$remotelog="/tmp/".$remotelog;
 #	$command_start = join " ", $command_start, ">", $remotelog, "2>&1";
 #	$command_start = join " ", $command_start, ";", "/bin/cat", $remotelog;
@@ -375,7 +375,7 @@ sub start
 #		or printerror "Can't create vm with $vmconfig";
 #
 
-my $logcontent = `ssh -l root localhost "$command_start"`;
+my $logcontent = `ssh -l root localhost "/bin/mkdir $remotedir; cd $remotedir; $command_start"`;
 save_to_file($logfile, $logcontent);
 
 
