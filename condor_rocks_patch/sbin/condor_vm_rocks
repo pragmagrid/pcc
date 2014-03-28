@@ -39,7 +39,8 @@ my $vmrun_prog;
 my $rockscmd_prog;
 
 # For rocks that using pragma_boot
-$vmrun_prog = 'pragma_boot';
+#$vmrun_prog = 'pragma_boot';
+$vmrun_prog = '/opt/pragma_boot/bin/pragma_boot';
 $rockscmd_prog = 'rocks';
 
 my $vminfofile = "vm.info";
@@ -240,9 +241,7 @@ sub getvmpid
 
 sub status
 {
-#status      [vmconfig]   Show the status of a VM
-	my $vmconfig = checkvmconfig($_[0]);
-
+#status      [vmconf]   Show the status of a VM
 	# If a second argument is passed, then we should print our results
 	# to stdout. Otherwise, just return the current status.
 	my $print_result = undef;
@@ -253,18 +252,58 @@ sub status
 	my $output_status = "Stopped";	# default status
 
 	
-	my $vmpid = getvmpid($vmconfig);
+#	my $vmpid = getvmpid($vmconf);
+#	if( defined($print_result) ) {
+#		if( $vmpid ne "") {
+#			$output_status="Running";
+#			print OUTPUT "STATUS=$output_status\n";	
+#			print OUTPUT "PID=$vmpid\n";
+#		}
+#		print OUTPUT "STATUS=$output_status\n";
+#	}
 
+        open INFO,  $vminfofile or die;
+        my $frontend="";
+        while (my $infoline=<INFO>) {
+                chomp($infoline);
+                (my $k,my $v) = split /=/, $infoline;
+                $k =~ s/^\s+|\s+$//g;
+                $v =~ s/^\s+|\s+$//g;
+                if($k eq "Frontend"){
+                        $frontend=$v;
+                }
+                next;
+        }
+	my $rocks_status=rocks_status($frontend);
+	
+	if($rocks_status eq "active"){
+		$output_status="Running";
+	}else{
+		$output_status="Stopped";
+	}
 	
 	if( defined($print_result) ) {
-		if( $vmpid ne "") {
-			$output_status="Running";
-			print OUTPUT "STATUS=$output_status\n";	
-			print OUTPUT "PID=$vmpid\n";
-		}
-		print OUTPUT "STATUS=$output_status\n";
+		print OUTPUT "STATUS=$output_status\n";	
 	}
+
 	return $output_status;
+}
+
+sub rocks_status
+{
+#rocks status [hostname]	
+	my $hostname = $_[0];
+	my $command="ssh -l root localhost rocks list cluster status=true";
+	my $out = `$command`;
+	my $status="";
+	while($out =~ /([^\n]+)\n?/g){
+	        my $line = $1;
+        	if($1 =~ m/$hostname/){
+        		$status=(split( /\s+/, $line))[-1];
+		}
+	}
+	fprint("$status\n");
+	return $status
 }
 
 sub pidofvm
@@ -318,14 +357,25 @@ sub start
 		$logfile="pragma_boot.log";
 	}
 
-#	$command_start = join " ", $command_start, ">", $logfile;
-#	$command_start = join " ", $command_start, ">", "2>&1";
-#
+## The idea here is to let pragma_boot script output a log file when ssh to root account, 
+## and `cat` that log file so that ssh command can return the cat results.
+## I wanted to name the remote log file differently. 
+## But I was wrong, the pragma_boot actually has a fixed log file: pragma_boot.log
+#	my $millisec=`date +%s.%N`;
+#	$millisec =~ s/^\s+|\s+$//g;
+#	my $remotelog = join ".",$logfile, $millisec;
+#	$remotelog="/tmp/".$remotelog;
+#	$command_start = join " ", $command_start, ">", $remotelog, "2>&1";
+#	$command_start = join " ", $command_start, ";", "/bin/cat", $remotelog;
+
+        $command_start = join " ", $command_start, ";", "/bin/cat pragma_boot.log";
+	fprint("Start Command: $command_start");
+
 #	!system $command_start
 #		or printerror "Can't create vm with $vmconfig";
 #
 
-my $logcontent = `ssh -l root localhost $command_start`;
+my $logcontent = `ssh -l root localhost "$command_start"`;
 save_to_file($logfile, $logcontent);
 
 
@@ -380,17 +430,33 @@ sub stop
 {
 #Shutdown a VM
 	printverbose "stop is called";
-	my $vmconfig = checkvmconfig($_[0]);
+	open INFO,  $vminfofile or die;
+        my $frontend="";
+        my $compute="";
+        while (my $infoline=<INFO>) {
+                chomp($infoline);
+                (my $k,my $v) = split /=/, $infoline;
+                $k =~ s/^\s+|\s+$//g;
+                $v =~ s/^\s+|\s+$//g;
+                if($k eq "Frontend"){
+                        $frontend=$v;
+                }
+                if($k eq "Compute"){
+                        $compute=$v;
+                }
+                next;
+        }
+        my $hosts= join "," , $frontend, $compute;
+        print $hosts,"\n";
+        while($hosts =~ /([^,]+),?/g){
+		my $host=$1;
+		$host =~ s/^\s+|\s+$//g;
+                if(rocks_status($host) eq "active"){
+                        fprint("STOPING $host");
+			`ssh -l root localhost rocks stop host vm $host`;
+                }
+        }
 
-	# Get status
-	my $vmstatus = status($vmconfig);
-	if( $vmstatus eq "Running" ) {
-		# Try to stop vm
-		!system $rockscmd_prog, "stop cluster" #FIXME
-			or printerror "Can't stop vm with $vmconfig";
-
-		sleep(2);
-	}
 }
 
 sub killvm
