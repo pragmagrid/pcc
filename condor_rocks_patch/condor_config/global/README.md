@@ -12,7 +12,7 @@ Here is the basic configuration to add node into your pool.
 ##  you install, configure or debug your Condor installation.
 ##  It is important to have this defined.
 
-ALLOW_READ = nbcr-224.ucsd.edu, 129.79.49.186,129-79-49-186.dhcp-bl.indiana.edu, vm-container-0-2
+ALLOW_READ = nbcr-224.ucsd.edu, pragma8.cs.indiana.edu
 
 ##  Write access.  Machines listed here can join your pool, submit
 ##  jobs, etc.  Note: Any machine which has WRITE access must
@@ -26,9 +26,9 @@ ALLOW_READ = nbcr-224.ucsd.edu, 129.79.49.186,129-79-49-186.dhcp-bl.indiana.edu,
 ##  but note that this will allow anyone to submit jobs or add
 ##  machines to your pool and is a serious security risk.
 
-ALLOW_WRITE = nbcr-224.ucsd.edu, 129.79.49.186,129-79-49-186.dhcp-bl.indiana.edu, vm-container-0-2
+ALLOW_WRITE = nbcr-224.ucsd.edu, pragma8.cs.indiana.edu
 
-# Grant machines to access to ADVERTISE_MASTER and ADVERTISE_STARTD
+# Grant machines to access to ADVERTISE_MASTER ADVERTISE_STARTD and ADVERTISE_SCHEDD
 ALLOW_ADVERTISE_MASTER = $(ALLOW_WRITE), pragma8.cs.indiana.edu
 ALLOW_ADVERTISE_STARTD = $(ALLOW_WRITE), pragma8.cs.indiana.edu
 ALLOW_ADVERTISE_SCHEDD = $(ALLOW_WRITE), pragma8.cs.indiana.edu
