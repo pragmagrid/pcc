@@ -464,7 +464,16 @@ LOCK		= $(LOG)
 ##  the execute machine and just make sure the two strings match.  The
 ##  default for this setting is False, since it is more secure this
 ##  way.
-#TRUST_UID_DOMAIN = False
+
+## HTCondor uses user nobody if the value of the UID_DOMAIN configuration variable of the submitting and executing machines
+## are different or if STARTER_ALLOW_RUNAS_OWNER is false or if the job ClassAd contains RunAsOwner=False. Under Windows, 
+## HTCondor by default runs jobs under a dynamically created local account that exists for the duration of the job, but it 
+## can optionally run the job as the user account that owns the job if STARTER_ALLOW_RUNAS_OWNER is True and the job contains 
+## RunAsOwner=True.
+## Set this value to true so that all domains can be specified as "PRAGMA". 
+TRUST_UID_DOMAIN = True 
+
+
 
 ## If you would like to be informed in near real-time via condor_q when
 ## a vanilla/standard/java job is in a suspension state, set this attribute to
@@ -1651,7 +1660,7 @@ QUEUE_SUPER_USERS	= root, condor
 
 ##  honor the run_as_owner option from the condor submit file.
 ##
-#STARTER_ALLOW_RUNAS_OWNER = TRUE
+STARTER_ALLOW_RUNAS_OWNER = TRUE
 
 ##  Tell the Starter/Startd what program to use to remove a directory
 ##  condor_rmdir.exe is a windows-only command that does a better job
