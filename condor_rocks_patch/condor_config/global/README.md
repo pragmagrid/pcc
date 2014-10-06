@@ -34,6 +34,8 @@ ALLOW_ADVERTISE_STARTD = $(ALLOW_WRITE), pragma8.cs.indiana.edu
 ALLOW_ADVERTISE_SCHEDD = $(ALLOW_WRITE), pragma8.cs.indiana.edu
 
 
+## Need to change the following parameters in all condor nodes' condor_config files
+
 ## HTCondor uses user nobody if the value of the UID_DOMAIN configuration variable of the submitting and executing machines
 ## are different or if STARTER_ALLOW_RUNAS_OWNER is false or if the job ClassAd contains RunAsOwner=False. Under Windows, 
 ## HTCondor by default runs jobs under a dynamically created local account that exists for the duration of the job, but it 
