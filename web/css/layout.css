@@ -1,0 +1,200 @@
+/* --------------------- SB -------------------------------------------- */
+ul,ol { list-style:none; }
+h1,h2,h3,h4,h5,h6,pre,code,td { font-size:1em; }
+ul,ol,li,h1,h2,h3,h4,h5,h6,pre,form,body,html,p,blockquote,fieldset,input,label,div,dd,dt,dl,table,tr,td { margin:0; padding:0; }
+a img,:link img,:visited img,fieldset { border:none; }
+
+/* ------------------ global elements----------------------------------- */
+body { 
+	background:#ccc url(../images/bg-body.jpg) top repeat-x;
+	text-align:center; 
+	font:13px/16px "Helvetica Neue", Helvetica, Arial, sans-serif; 
+	color:#4e4e4e;
+	}
+
+blockquote { margin-left:10px; margin-right:10px; }
+h1	{ font-size:1.2em; color:#000; }
+h2	{ font-size:1.1em; color:#000; }
+h3	{ font-size:1.0em; color:#000; }
+h1 span,h2 span,h3 span	{ display:none; }
+a:link,a:visited	{ color:#c64703; text-decoration:none; outline:none; }
+a:hover,a:active	{ color:#eaac49; text-decoration:none; outline:none; }
+div.clear	{ clear:both; height:.01em; overflow:hidden; }
+img.img-left { float:left; margin:0px; }
+img.img-right { float:right; margin:0px; }
+.divider-rt {height:1px; width:248px; background-color:#fff; float:left;margin:0 0 11px 0;}
+
+/* -------- wraps-containers ------------------------------------------------------------ */
+#wrap-container {
+	background:#fff url(../images/bg-wrap-container.png) top center no-repeat;
+	margin:0 auto;
+	text-align:center;
+	}
+
+#wrap {
+	width:1024px;
+	margin:0 auto;
+	text-align:left;
+	}
+
+#masthead {height:67px; width:1024px; float:left;}
+
+#logo {background:url(../images/bg-logo.png) no-repeat;height:67px; width:244px; float:left;}
+	#logo a {display:block; width:244px; height:67px;}
+	#logo span {display:none;}
+	
+/* ----- column-left ----- */
+#column-left {
+	width:244px;
+	float:left;
+	}
+	#column-left p { padding:0px; }
+
+/* ----- column-middle ----- */
+#column-middle {
+	width:532px;
+	float:left;
+	line-height:18px; 
+	}
+	#column-middle p, #column-middle ul { padding:0px 14px 10px 14px; }
+	#column-middle ul li {padding:0 0 0 20px; list-style:disc; list-style-position:inside;}
+
+.news-container {background:url(../images/bg-news-container.png) no-repeat; width:100%; height:100%; float:left; margin:20px 0 40px 0;}
+
+.news-article {width:488px;height:100%;margin:0 0 0 22px;}
+	.news-article h2 {color:#c64703; font-size:24px; font-weight:normal;padding:0 0 3px 0;}
+	.news-article p.postdate {color:#797979; font-size:10px;padding:0;}
+	.news-article p.entry {margin:20px 0 0 0;}
+
+/* ----- column-right ----- */
+#column-right {
+	width:248px;
+	float:left;
+	}
+	#column-right p { padding:0px; }
+	#column-right .divider {width:248px; height:1px; background:#fff; margin:0 0 10px 0;}
+
+.index-news	{background:#fafafa; margin-bottom:20px;}
+	.index-news span {color:#338ba7; font-weight:bold;}
+		  
+.news-entry {width:230px; margin:; padding:0px 0 10px 9px;}	  
+.news-entry p.more { text-align:center; padding:0 0 0 -9px;}
+	  
+/* ----- bottom-wrap ----- */
+#bottom-wrap {
+	height:50px;
+	clear:both;
+	width:100%;
+	}
+	
+/* ------- headers ----------------------------------------------------------- */
+#header { height:153px; width:1024px; float:left; } 
+	body#index #header { background:url(../images/header-index-1.png) no-repeat; }
+	
+/*CYCLER - COMMON*/
+.cycler {position:relative;}
+.cycler img{position:absolute;z-index:1}
+.cycler img.active{z-index:3}
+
+#img1 {width:1024px; height:153px;float:left;margin:0;}
+
+#header-sub {background:url(../images/bg-header-sub.png) no-repeat; width:1024px; height:60px; float:left;}
+
+/* ------- buttons ----------------------------------------------------------- */
+#btn-reference {background:url(../images/btn-reference.png) no-repeat; width:244px; height:72px; float:left; margin:19px 0 0 0; padding:0;}
+	#btn-reference span {display:none;}
+	#btn-reference a {display:block; width:244px; height:72px;}
+	#btn-reference a:hover {background:url(../images/btn-reference.png) -0px -72px no-repeat;}
+
+#btn-award {background:url(../images/btn-award.png) no-repeat; width:244px; height:109px; float:left; margin:17px 0 0 0; padding:0;}
+	#btn-award span {display:none;}
+	#btn-award a {display:block; width:244px; height:109px;}
+	#btn-award a:hover {background:url(../images/btn-award.png) -0px -109px no-repeat;}
+
+#btn-expeditions {background:url(../images/btn-expeditions.png) no-repeat; width:248px; height:204px; float:left; margin:20px 0 0 0; padding:0;}
+	#btn-expeditions span {display:none;}
+	#btn-expeditions a {display:block; width:248px; height:204px;}
+	#btn-expeditions a:hover {background:url(../images/btn-expeditions.png) -0px -204px no-repeat;}
+
+#btn-twitter {background:url(../images/btn-twitter.png) no-repeat; width:52px; height:65px; float:left; margin:0; padding:0;}
+	#btn-twitter span {display:none;}
+	#btn-twitter a {display:block; width:52px; height:65px;}
+	#btn-twitter a:hover {background:url(../images/btn-twitter.png) -0px -65px no-repeat;}
+
+#btn-flickr {background:url(../images/btn-flickr.png) no-repeat; width:52px; height:65px; float:left; margin:0; padding:0;}
+	#btn-flickr span {display:none;}
+	#btn-flickr a {display:block; width:52px; height:65px;}
+	#btn-flickr a:hover {background:url(../images/btn-flickr.png) -0px -65px no-repeat;}
+
+#btn-youtube {background:url(../images/btn-youtube.png) no-repeat; width:52px; height:65px; float:left; margin:0; padding:0;}
+	#btn-youtube span {display:none;}
+	#btn-youtube a {display:block; width:52px; height:65px;}
+	#btn-youtube a:hover {background:url(../images/btn-youtube.png) -0px -65px no-repeat;}
+
+#btn-facebook {background:url(../images/btn-facebook.png) no-repeat; width:52px; height:65px; float:left; margin:0; padding:0;}
+	#btn-facebook span {display:none;}
+	#btn-facebook a {display:block; width:52px; height:65px;}
+	#btn-facebook a:hover {background:url(../images/btn-facebook.png) -0px -65px no-repeat;}
+
+/* ------ subhead framework ------------------------------------------------- */
+#subhead { height:20px; } 
+	body#index #subhead { background:url(../images/subhead-index.jpg); }
+	body#about #subhead { background:url(../images/subhead-about.jpg); }
+	body#contact #subhead { background:url(../images/subhead-contact.jpg); }
+	body#thankyou #subhead { background:url(../images/subhead-thankyou.jpg); }
+	body#sitemap #subhead { background:url(../images/subhead-sitemap.jpg); }
+
+/* ------ nav ------------------------------------------------- */
+#nav { 
+	background:url(../images/nav.png) no-repeat; 
+	width:780px; 
+	height:67px; 
+	margin:0;
+	padding:0; 
+	float:left;
+	}
+	#nav span { display: none; }
+	#nav li, #nav a { height:67px; display:block; } 
+	#nav li { float:left; list-style:none; display:inline; }
+	#nav-01, #nav-02, #nav-03, #nav-04, #nav-05, #nav-06 {padding-right:14px;}
+	#nav-01 { width: 75px;}
+	#nav-02 { width: 99px;}
+	#nav-03 { width: 106px;}
+	#nav-04 { width: 97px;}
+	#nav-05 { width: 89px;}
+	#nav-06 { width: 119px;}
+	#nav-07 { width: 100px;}
+	#nav-01 a:hover { background:url(../images/nav.png)  -0px -67px no-repeat; }
+	#nav-02 a:hover { background:url(../images/nav.png) -89px -67px no-repeat; }
+	#nav-03 a:hover { background:url(../images/nav.png) -202px -67px no-repeat; }
+	#nav-04 a:hover { background:url(../images/nav.png) -322px -67px no-repeat; }
+	#nav-05 a:hover { background:url(../images/nav.png) -433px -67px no-repeat; }
+	#nav-06 a:hover { background:url(../images/nav.png) -536px -67px no-repeat; }
+	#nav-07 a:hover { background:url(../images/nav.png) -669px -67px no-repeat; }
+	body#about #nav-01 { background:url(../images/nav.png)  -0px -67px no-repeat; }
+	body#expeditions #nav-02 { background:url(../images/nav.png) -89px -67px no-repeat; }
+	body#tech #nav-03 { background:url(../images/nav.png) -202px -67px no-repeat; }
+	body#members #nav-04 { background:url(../images/nav.png) -322px -67px no-repeat; }
+	body#students #nav-05 { background:url(../images/nav.png) -433px -67px no-repeat; }
+	body#news #nav-06 { background:url(../images/nav.png) -536px -67px no-repeat; }
+	body#resources #nav-07 { background:url(../images/nav.png) -669px -67px no-repeat; }
+
+/* -------------- footer --------------------------------------------------- */
+#footer-container {
+	background-color:#cccccc;
+	width:100%;
+	margin:0 auto;
+	text-align:center;
+	}
+	
+#footer {
+	width:1024px;
+	margin:10px auto;
+	text-align:center;
+	}
+#footer p { color:#009900; margin-bottom:10px; }
+#footer a:link, #footer a:visited { color:#009900; }
+#footer a:hover, #footer a:active { color:#000; }
+
+
+
