@@ -39,8 +39,8 @@ my $vmrun_prog;
 my $rockscmd_prog;
 
 # For rocks that using pragma_boot
-#$vmrun_prog = 'pragma_boot';
-$vmrun_prog = '/opt/pragma_boot/bin/pragma_boot';
+$vmrun_prog = '/opt/condor/sbin/pragma_boot';
+#$vmrun_prog = '/opt/pragma_boot/bin/pragma_boot';
 $rockscmd_prog = 'rocks';
 
 my $vminfofile = "vm.info";
@@ -342,20 +342,34 @@ sub start
 	   $value =~ s/^\s+|\s+$//g;
 	   $hash{$key} = $value;
 	}
-	
 	my $command_start=$vmrun_prog;
-	my $logfile;	
-	$command_start = join " ",
-                $command_start,
-                "--basepath $hash{basepath}",
-                "--num_cpus $hash{num_cores}",
-                "--key $hash{key}",
-                "--vcname $hash{vcname}";
-	if (exists $hash{logfile}){
-		$logfile=$hash{logfile};
-	}else{
+	my $logfile="";	
+#	$command_start = join " ",
+#                $command_start,
+#                "--basepath $hash{basepath}",
+#                "--num_cpus $hash{num_cores}",
+#                "--key $hash{key}",
+#                "--vcname $hash{vcname}";
+#        if (exists $hash{logfile}){
+#                $logfile=$hash{logfile};
+#        }else {
+#                $logfile="pragma_boot.log";
+#        }
+
+	while ( my ($key, $value) = each(%hash) ){
+		if(($key ne "executable")&&($key ne "--executable")&&($key ne "logfile")&&($key ne "--logfile")){	
+			$command_start = join " ", $command_start, $key, $value;
+		}else{
+			if(($key eq "logfile")||($key eq "--logfile")){
+				$logfile=$value;
+			}
+		}
+	}
+	if($logfile eq "") {
 		$logfile="pragma_boot.log";
 	}
+#	print OUTPUT $command_start," ", $logfile, "\n";
+
 
 ## The idea here is to let pragma_boot script output a log file when ssh to root account, 
 ## and `cat` that log file so that ssh command can return the cat results.
@@ -455,6 +469,11 @@ sub stop
                         fprint("STOPING $host");
 			`ssh -l root localhost rocks stop host vm $host`;
                 }
+        }
+	#Do we really need to remove cluster?
+        if ( $frontend ne "" ) {
+          sleep 60;
+          `ssh -l root localhost rocks remove cluster $frontend`;
         }
 
 }
