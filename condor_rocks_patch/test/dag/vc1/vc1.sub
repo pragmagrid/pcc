@@ -4,7 +4,7 @@ requirements 		     = Machine =="nbcr-224.ucsd.edu"
 log                          = vc1.log.txt
 vm_type                      = rocks
 vm_memory                    = 64
-rocks_job_dir                  = /tmp/dag_vm
+rocks_job_dir                  = /tmp/dag_vm/vc1
 RequestMemory = 64
 rocks_should_transfer_files = Yes
 RunAsOwner=True

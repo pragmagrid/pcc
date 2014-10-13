@@ -1,0 +1,7 @@
+--executable      = pragma_boot
+--basepath        = /opt/pragma_boot/vm-images
+--key             = ~/.ssh/id_rsa.pub
+--num_cores       = 2
+--vcname          = lifemapper
+--logfile         = shava_pragma_boot.log
+--ipop-enable-cient=${COLLECTOR_HOST_STRING}/ipop/register.php?jobid=${DAGManJobId}

@@ -4,5 +4,4 @@
 --num_cores       = 2
 --vcname          = lifemapper
 --logfile         = shava_pragma_boot.log
---ipop-enable-server=${COLLECTOR_HOST_STRING}/ipop/register.php?jobid=${DAGManJobId}
 --ipop-enable-cient=${COLLECTOR_HOST_STRING}/ipop/register.php?jobid=${DAGManJobId}

@@ -383,12 +383,12 @@ sub start
 			$command_start = join " ", $command_start, $key, $value;
 		}else{
 			if(($key eq "logfile")||($key eq "--logfile")){
-				$logfile=$value;
+				$logfile=$condorenv{"Machine"}."_".$value;
 			}
 		}
 	}
 	if($logfile eq "") {
-		$logfile="pragma_boot.log";
+		$logfile=$condorenv{"Machine"}."_pragma_boot.log";
 	}
 #        print OUTPUT $command_start," ", $logfile, "\n";
 
