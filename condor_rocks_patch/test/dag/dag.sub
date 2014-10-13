@@ -1,0 +1,5 @@
+    # File name: vc-ipop.dag
+    #
+    JOB  A  vc1.sub 
+    JOB  B  vc2.sub
+#    JOB  C  vc3.sub

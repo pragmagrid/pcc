@@ -1,9 +1,0 @@
-universe                     = vm
-executable                   = lifemapper
-log                          = simple.condor.log
-vm_type                      = rocks
-vm_memory                    = 64
-rocks_job_dir              = /home/yuanluo/condor/test/samples/s3
-RequestMemory = 64
-rocks_should_transfer_files = NO
-queue

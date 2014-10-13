@@ -38,13 +38,14 @@ my $verbose = undef;
 my $vmrun_prog;
 my $rockscmd_prog;
 my @condor_env_list =glob(".*.ad");
+my %condorenv=getenv();
 # For rocks that using pragma_boot
 $vmrun_prog = '/opt/condor/sbin/pragma_boot';
 #$vmrun_prog = '/opt/pragma_boot/bin/pragma_boot';
 $rockscmd_prog = 'rocks';
 
-my $vminfofile = "vm.info";
-my $perllog = "condor_vm_rocks.log";
+my $vminfofile = $condorenv{"Machine"}."_vc.info";
+my $perllog = $condorenv{"Machine"}."_condor_vm_rocks.log";
 
 # stdout will be directed to stderr
 #open STDOUT, ">&STDERR" or die "Can't dup STDERR: $!";
@@ -103,6 +104,25 @@ Examples:
 EOF
 
 exit(1);
+}
+
+sub getenv{
+        my %condorenv;
+        foreach my $envfile (@condor_env_list) {
+                open FILE2, $envfile or die;
+                while (my $line=<FILE2>) {
+                   chomp($line);
+                   next if /^\s*(#.*)?$line/;
+                   my($key, $value) = split(/=/, $line, 2);
+                   $key =~ s/^\s+|\s+$//g;
+                   $key =~ s/^"|"$//g;
+                   $value =~ s/^\s+|\s+$//g;
+                   $value =~ s/^"|"$//g;
+                   $condorenv{$key} = $value;
+                }
+                close FILE2;
+        }
+	return %condorenv;
 }
 
 sub printerror
@@ -325,28 +345,6 @@ sub getvminfo
 
 }
 
-sub substitute_all_env
-{
-#substitute_all_env [env hash table] [string with env]
-	use warnings;
-use strict;
-my %hashenv = $_[0];
-my $string = $_[1];
-my $expanded = '';
-my @parts = split(/(\$\w+)|(\${\w+})/, $string);
-foreach my $seg (@parts)
-  {
-    next if (not defined($seg));
-    $seg = ($hashenv{$1} || '')  if ($seg =~ m/\${?(\w+)}?/);
-    $expanded .= $seg;
-  }
-
-print OUTPUT "IS NOW: <$expanded>\n";
-
-}
-
-
-
 sub start
 {
 #start       [vmconfig]	Start a VM
@@ -395,23 +393,23 @@ sub start
 #        print OUTPUT $command_start," ", $logfile, "\n";
 
 ## Extract env values from @condor_env_list files and substitute all env variables in $command_start
-        my %condorenv;
-	foreach my $envfile (@condor_env_list) {
-		open FILE2, $envfile or die;
-	        while (my $line=<FILE2>) {
-        	   chomp($line);
- 	           next if /^\s*(#.*)?$line/;
-        	   #(my $key,my $value) = split /=/, $line;
-	 	   #split on the first = only
-		   my($key, $value) = split(/=/, $line, 2);
-	           $key =~ s/^\s+|\s+$//g;
-		   $key =~ s/^"|"$//g;
-	           $value =~ s/^\s+|\s+$//g;
-		   $value =~ s/^"|"$//g;
-	           $condorenv{$key} = $value;
-		}
-		close FILE2;
-	}
+#        my %condorenv;
+#	foreach my $envfile (@condor_env_list) {
+#		open FILE2, $envfile or die;
+#	        while (my $line=<FILE2>) {
+#       	   chomp($line);
+#	           next if /^\s*(#.*)?$line/;
+#        	   #(my $key,my $value) = split /=/, $line;
+#	 	   #split on the first = only
+#		   my($key, $value) = split(/=/, $line, 2);
+#	           $key =~ s/^\s+|\s+$//g;
+#		   $key =~ s/^"|"$//g;
+#	           $value =~ s/^\s+|\s+$//g;
+#		   $value =~ s/^"|"$//g;
+#	           $condorenv{$key} = $value;
+#		}
+#		close FILE2;
+#	}
 	my $expanded = '';
 	my @parts = split(/(\$\w+)|(\${\w+})/, $command_start);
 	foreach my $seg (@parts){

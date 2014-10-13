@@ -1,0 +1,12 @@
+universe                     = vm
+executable                   = rocks_vc_2
+requirements   		     = Machine =="pragma8.cs.indiana.edu"
+log                          = vc2.log.txt
+vm_type                      = rocks
+vm_memory                    = 64
+rocks_job_dir                  = /tmp/dag_vm
+RequestMemory = 64
+rocks_should_transfer_files = Yes
+RunAsOwner=True
+queue
+
