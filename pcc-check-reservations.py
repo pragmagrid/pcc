@@ -3,12 +3,12 @@
 """pcc-check-reservations.py
 
 Queries Booked and checks for reservations that need to be started or stopped.
-Configuration for script is held in booked.cfg file
+Configuration for script is held in cloud-scheduler.cfg file
 
 Example:
       $ pcc-check-reservations.py
 
-booked.cfg attributes:
+cloud-scheduler.cfg attributes:
   Authentication:
     username: username to authenticate to Booked 
     password: password to authenticate to Booked 
@@ -231,7 +231,7 @@ def writeDag( data, config, headers ):
 
 # read input arguments from property file
 config = ConfigParser()
-config.read("booked.cfg");
+config.read("cloud-scheduler.cfg");
 reservationSecsLeft = int( config.get( "Stopping", "reservationSecsLeft" ) );
 
 # configure logging 
