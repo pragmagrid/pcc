@@ -23,15 +23,16 @@ cloud-scheduler.cfg attributes:
 
 from ConfigParser import ConfigParser
 from datetime import datetime
-import dateutil.parser
 from httplib import HTTPConnection
 import json
 import logging
 import os
-import pytz
 from string import Template
 import sys
 import time
+
+ISO_FORMAT="%Y-%m-%dT%H:%M:%S" 
+ISO_LENGTH=19
 
 NODE_TEMPLATE = """
 universe                     = vm
@@ -254,26 +255,25 @@ for bookedReservation in data["reservations"]:
 # Iterate thru unique reservations
 for bookedReservation in bookedReservations.values():
   (headers, data) = queryBooked( config, "Reservations/"+bookedReservation["referenceNumber"], "GET", None, headers );
-
   # Gather reservation data info
   logging.debug( "Reservation: ref=%s, status=%s, resourceId=%s" % (bookedReservation["referenceNumber"], data['statusId'], data['resourceId']) )
-  startTime = dateutil.parser.parse(data['startDateTime'])
-  endTime = dateutil.parser.parse(data['endDateTime'])
-  now = datetime.now(pytz.timezone('America/Los_Angeles'))
-  logging.debug( "  Start: " + str(startTime) + ", End: " + str(endTime) ) 
-  startDiff = startTime - datetime.now(pytz.timezone('America/Los_Angeles')) 
-  endDiff = endTime - datetime.now(pytz.timezone('America/Los_Angeles')) 
+  startTime = datetime.strptime( data['startDateTime'][:ISO_LENGTH], ISO_FORMAT )
+  endTime = datetime.strptime( data['endDateTime'][:ISO_LENGTH], ISO_FORMAT )
+  now = datetime.now()
+  logging.debug( "  Start: " + data['startDateTime'] + ", End: " + data['endDateTime'] ) 
+  startDiff = startTime - now
+  endDiff = endTime - now
 
   # Reservation needs to be started
   if ( config.get("Status", "created") == data['statusId'] ):
     logging.debug( "  Reservation should be started in: " + str(startDiff) )
     if startDiff.total_seconds() <= 0: # should be less than
-      logging.info( "   Starting reservation at " + str(datetime.now(pytz.timezone('America/Los_Angeles'))) )
+      logging.info( "   Starting reservation at " + str(datetime.now()) )
       writeDag( data, config, headers )
       if not( updateStatus(data, "starting", config, headers) ):
         continue
       # <insert check of pcc status and check if running yet>
-      logging.info( "   VC running at " + str(datetime.now(pytz.timezone('America/Los_Angeles'))) )
+      logging.info( "   VC running at " + str(datetime.now()) )
       updateStatus( data, "running", config, headers ) 
   # else Reservation is running
   elif ( config.get("Status", "running") == data['statusId'] and endDiff.total_seconds() > reservationSecsLeft ):
