@@ -162,7 +162,7 @@ def convertAttributesToDict( attrs ):
     dictAttrs[attr['label']] = attr['value']
   return dictAttrs
 
-def writeDag( data, config, headers ):
+def writeDag( dagDir, data, config, headers ):
   """Write a Condor DAG to localdisk 
 
     The following files will be generated:
@@ -174,6 +174,7 @@ def writeDag( data, config, headers ):
       dag-{referenceNumber}/vc{resourceId}/vc{resourceId}.vmconf - pragma_boot args
 
     Args:
+      dagDir(string): Path to directory to store Condor DAGs
       data(JSON): Reservation JSON data from a GET request
       config(ConfigParser): Config file input data
       headers(string): HTTP header info containing auth data
@@ -189,10 +190,10 @@ def writeDag( data, config, headers ):
   userAttrs = convertAttributesToDict( userdata['customAttributes'] )
 
   # make dag dir and write user's key to disk
-  dagDir = "dag-" + data["referenceNumber"] 
+  dagDir = os.path.join( dagDir, "dag-" + data["referenceNumber"] )
   if not os.path.exists(dagDir):
     logging.debug( "  Creating dag directory " + dagDir )
-    os.mkdir(dagDir)
+    os.makedirs(dagDir)
     dagDir = os.path.abspath(dagDir)
   sshKeyPath = os.path.join(dagDir, "public_key")
   f = open( sshKeyPath, 'w' )
@@ -269,7 +270,7 @@ for bookedReservation in bookedReservations.values():
     logging.debug( "  Reservation should be started in: " + str(startDiff) )
     if startDiff.total_seconds() <= 0: # should be less than
       logging.info( "   Starting reservation at " + str(datetime.now()) )
-      writeDag( data, config, headers )
+      writeDag( config.get("Server", "dagDir"), data, config, headers )
       if not( updateStatus(data, "starting", config, headers) ):
         continue
       # <insert check of pcc status and check if running yet>
