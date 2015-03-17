@@ -287,8 +287,9 @@ for bookedReservation in bookedReservations.values():
     updateStatus(data, "stopping",config, headers )
   # else Reservation is stopping but time hasn't expired yet
   elif config.get("Status", "stopping") == data['statusId']: 
-    # <insert check if pcc is done
-    logging.debug( "  Reservation is shutting down" )
+    # <insert check if pcc is done>
+    logging.info( "   PCC has finished shutting down " + str(datetime.now()) )
+    updateStatus( data, "created", config, headers ) 
   # else reservation is active/future and unknown state
   else:
     logging.debug( "  Reservation in unknown state to PCC" )
