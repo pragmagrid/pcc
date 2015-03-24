@@ -54,7 +54,7 @@ VMCONF_TEMPLATE = """--executable      = pragma_boot
 --key             = $sshKeyPath
 --num_cpus       = $cpus       
 --vcname          = $vcname
---logfile         = pragma_boot.log
+--logfile         = $jobdir/pragma_boot.log
 --enable-ipop-server=http://$${COLLECTOR_HOST_STRING}/ipop/exchange.php?jobId=$${DAGManJobId}
 """
 
@@ -218,12 +218,12 @@ def writeDag( dagDir, data, config, headers ):
     logging.debug( "  Writing file " + f.name );
     dag_f.write( " JOB VC%s  %s\n" % (resource["id"], f.name) )
     s = Template(NODE_TEMPLATE)
-    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], memory=reservAttrs['Memory (Gb/host)'],jobdir=dagDir))
+    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], memory=reservAttrs['Memory (Gb/host)'], jobdir=dagDir))
     f.close()
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
     s = Template(VMCONF_TEMPLATE)
-    f.write( s.substitute(cpus=reservAttrs['CPU (per host)'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath) )
+    f.write( s.substitute(cpus=reservAttrs['CPU (per host)'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath, jobdir=dagDir) )
     f.close()
 
   # close out dag file
