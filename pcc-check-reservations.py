@@ -26,8 +26,12 @@ from datetime import datetime
 from httplib import HTTPConnection
 import json
 import logging
+from logging.handlers import TimedRotatingFileHandler
 import os
+import re
 from string import Template
+import socket
+import subprocess
 import sys
 import time
 
@@ -50,12 +54,28 @@ queue
 """
 
 VMCONF_TEMPLATE = """--executable      = pragma_boot
---basepath        = /opt/pragma_boot/vm-images
 --key             = $sshKeyPath
 --num_cpus       = $cpus       
 --vcname          = $vcname
 --logfile         = $jobdir/pragma_boot.log
---enable-ipop-server=http://$${COLLECTOR_HOST_STRING}/ipop/exchange.php?jobId=$${DAGManJobId}
+"""
+#--enable-ipop-server=http://nbcr-224.ucsd.edu/ipop/exchange.php?jobId=$jobid
+
+EMAIL_STARTING_TEMPLATE = """----- PRAGMA Cloud Scheduler Update @ $date -----
+
+Your resource reservation is being started.  You will receive an emai when
+the resources are ready for you to login.
+
+"""
+
+EMAIL_STARTED_TEMPLATE = """----- PRAGMA Cloud Scheduler Update @ $date -----
+
+Your resource reservation has been activated: $resourceinfo
+
+To access resources, login to the frontend.  E.g.,
+
+> ssh root@$fqdn
+
 """
 
 def query( connection, path, method, params, headers ):
@@ -180,7 +200,7 @@ def writeDag( dagDir, data, config, headers ):
       headers(string): HTTP header info containing auth data
 
     Returns:
-      bool: True if writes successful, False otherwise.
+      string: path to the dir where dag was written
   """
   # get reservation info
   reservAttrs = convertAttributesToDict( data['customAttributes'] )
@@ -223,13 +243,146 @@ def writeDag( dagDir, data, config, headers ):
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
     s = Template(VMCONF_TEMPLATE)
-    f.write( s.substitute(cpus=reservAttrs['CPU (per host)'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath, jobdir=dagDir) )
+    f.write( s.substitute(cpus=reservAttrs['CPU (per host)'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath, jobdir=dagDir, jobid=os.getpid()) )
     f.close()
 
   # close out dag file
   dag_f.close()
-  return True
+  return dagDir
 
+def getRegexFromFile( file, regex ):
+  """Grab some strings from a file based on a regex
+
+    Args:
+      file(string): Path to file containing string
+      regex(string): Regex to parse from file
+
+    Returns:
+      list: Args returned from regex
+  """
+  f = open( file, "r" )
+  matcher = re.compile( regex, re.MULTILINE );
+  matched = matcher.search( f.read() )
+  f.close()
+  if not matched:
+    return []
+  elif len(matched.groups()) == 1:
+    return matched.group(1)
+  else:
+    return matched.groups()
+
+def writeStringToFile( file, aString ):
+  """Write a string to file
+
+    Args:
+      file(string): Path to file containing string
+      aString(string): string to write to file
+
+    Returns:
+      bool: True if success otherwise false
+  """
+  f = open( file, 'w' )
+  f.write( aString )
+  return f.close()
+
+def isDagRunning( dagDir ):
+  """Check to see if dag is running
+
+    Args:
+      dagDir(string): Path to directory to store Condor DAGs
+
+    Returns:
+      bool: True if dag is running, False otherwise.
+  """
+  (active,inactive, resourceinfo, frontendFqdn) = ([],[], "", "")
+  subf = open( os.path.join(dagDir, 'dag.sub'), 'r' )
+  for line in subf:
+    matched = re.match( ".*\s(\S+)$", line )
+    if matched:
+      vcdir = os.path.dirname( matched.group(1) )
+      hostname = getRegexFromFile( os.path.join(vcdir, "hostname"), "(.*)" )
+      cluster_info_filename = os.path.join(vcdir, "cluster_info");
+      (cluster_fqdn, nodes) = ("", [])
+      if not os.path.exists( cluster_info_filename ):
+        subprocess.call('scp %s:%s %s' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir), shell=True)
+        cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
+        if not cluster_fqdn:
+          logging.info( "   No FQDN info available yet" )
+          return false
+        nodes.append( cluster_fqdn.split(".")[0] )
+        numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
+        cnodes = ""
+        if numcpus > 0:
+          cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'cnodes=(.+)' )
+          if not cnodes:
+            logging.info( "   No compute nodes info available yet" )
+            continue
+          nodes.extend( cnodes.split( "\s+" ) )
+        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) )
+      else:
+        cluster_fqdn = getRegexFromFile( cluster_info_filename, "fqdn=(.*)" )
+        nodes.append( cluster_fqdn.split(".")[0] )
+        cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
+        nodes.extend( cnodes.split( "\s+" ) )
+      frontendFqdn = cluster_fqdn
+      resourceinfo += "\n\nFrontend: %s\nNumber of compute nodes: %d" % (cluster_fqdn, len(nodes)-1);
+      rocks_status_filename =  os.path.join( vcdir, "rocks_list_host_vm" )
+      stdout_f = open( rocks_status_filename, "w" )
+      subprocess.call('ssh %s rocks list host vm status=true' % hostname, stdout=stdout_f, shell=True)
+      stdout_f.close()
+      for node in nodes:
+        status = getRegexFromFile( rocks_status_filename, "(%s:.*active)" % node )
+        if len(status) > 0:
+          active.append(node)
+        else:
+          inactive.append(node)
+  subf.close()
+  logging.info( "   Active nodes: %s" % str(active) )
+  logging.info( "   Inactive nodes: %s" % str(inactive) )
+  if len(inactive) == 0:
+    s = Template(EMAIL_STARTED_TEMPLATE)
+    return s.substitute(date=str(datetime.now()), resourceinfo=resourceinfo, fqdn=frontendFqdn)
+  return None;
+
+def startDagPB( dagDir ):
+  """Start the dag using pragma_boot directly via SSH
+
+    Args:
+      dagDir(string): Path to directory to store Condor DAGs
+      headers(string): HTTP header info containing auth data
+
+    Returns:
+      bool: True if writes successful, False otherwise.
+  """
+  local_hostname = socket.gethostname()
+  subf = open( os.path.join(dagDir, 'dag.sub'), 'r' )
+  for line in subf:
+    matched = re.match( ".*\s(\S+)$", line )
+    if matched:
+      vcfile = matched.group(1)
+      vcf = open( vcfile, 'r' );
+      matched = re.match( '.*Machine =="([^"]+)".*', vcf.read(), re.DOTALL )
+      vcf.close()
+      hostname = matched.group(1)
+      host_f = open( os.path.join(os.path.dirname(vcfile), "hostname"), 'w' )
+      host_f.write( hostname )
+      host_f.close()
+      if hostname != local_hostname: 
+        logging.debug( "  Copying dir %s over to %s:%s " % (dagDir,hostname, dagDir) )
+        subprocess.call('ssh %s mkdir -p /var/run/pcc' % hostname, shell=True)
+        subprocess.call('scp -r %s %s:%s' % (dagDir, hostname, dagDir), shell=True)
+      vmconf_file = vcfile.replace( '.sub', '.vmconf' )
+      vmf = open( vmconf_file, 'r' );
+      args = ""
+      for line in vmf:
+        matched = re.match( "(--\S+)\s+=\s+(.*)", line )
+        if matched and matched.group(1) != '--executable' and matched.group(1) != '--logfile':
+          args += " %s=%s" % (matched.group(1), matched.group(2))
+      cmdline = "ssh -f %s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (hostname, dagDir, args, dagDir)
+      logging.debug( "  Running pragma_boot: %s: " % cmdline )
+      subprocess.call(cmdline, shell=True)
+  subf.close()
+  return True
 
 # read input arguments from property file
 config = ConfigParser()
@@ -237,11 +390,15 @@ config.read("cloud-scheduler.cfg");
 reservationSecsLeft = int( config.get( "Stopping", "reservationSecsLeft" ) );
 
 # configure logging 
-logging.basicConfig(
-  filename=config.get("Logging", "file"), 
-  format='%(asctime)s %(levelname)s:%(message)s', 
-  level=config.get("Logging", "level")
+logger = logging.getLogger()
+logger.setLevel( config.get("Logging", "level") )
+handler = TimedRotatingFileHandler(
+  config.get("Logging", "file"), when="W0", interval=1, backupCount=5
 )
+handler.setFormatter(
+  logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+)
+logger.addHandler(handler)
 
 # Examine all reservations and determine which require actions
 logging.debug( "Reading current and future reservations" )
@@ -270,11 +427,19 @@ for bookedReservation in bookedReservations.values():
     logging.debug( "  Reservation should be started in: " + str(startDiff) )
     if startDiff.total_seconds() <= 0: # should be less than
       logging.info( "   Starting reservation at " + str(datetime.now()) )
-      writeDag( config.get("Server", "dagDir"), data, config, headers )
-      if not( updateStatus(data, "starting", config, headers) ):
-        continue
-      # <insert check of pcc status and check if running yet>
-      logging.info( "   VC running at " + str(datetime.now()) )
+      dagDir = writeDag( config.get("Server", "dagDir"), data, config, headers )
+      startDagPB( dagDir )
+      s = Template(EMAIL_STARTING_TEMPLATE)
+      data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
+      updateStatus( data, "starting", config, headers )
+  # else Reservation is starting
+  elif config.get("Status", "starting") == data['statusId']: 
+    logging.info( "   Checking status of reservation " )
+    dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
+    info = isDagRunning( dagDir )
+    if info:
+      logging.info( "   Reservation is running" )
+      data['description'] += "\n\n%s" % info
       updateStatus( data, "running", config, headers ) 
   # else Reservation is running
   elif ( config.get("Status", "running") == data['statusId'] and endDiff.total_seconds() > reservationSecsLeft ):
