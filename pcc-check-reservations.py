@@ -243,7 +243,7 @@ def writeDag( dagDir, data, config, headers ):
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
     s = Template(VMCONF_TEMPLATE)
-    f.write( s.substitute(cpus=reservAttrs['CPU (per host)'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath, jobdir=dagDir, jobid=os.getpid()) )
+    f.write( s.substitute(cpus=reservAttrs['CPUs'], vcname=reservAttrs['VC Name'], sshKeyPath=sshKeyPath, jobdir=dagDir, jobid=os.getpid()) )
     f.close()
 
   # close out dag file
