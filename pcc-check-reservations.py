@@ -63,7 +63,7 @@ VMCONF_TEMPLATE = """--executable      = pragma_boot
 
 EMAIL_STARTING_TEMPLATE = """----- PRAGMA Cloud Scheduler Update @ $date -----
 
-Your resource reservation is being started.  You will receive an emai when
+Your resource reservation is being started.  You will receive an email when
 the resources are ready for you to login.
 
 """
@@ -215,10 +215,14 @@ def writeDag( dagDir, data, config, headers ):
     logging.debug( "  Creating dag directory " + dagDir )
     os.makedirs(dagDir)
     dagDir = os.path.abspath(dagDir)
+  rf = open( '/root/.ssh/id_rsa.pub', 'r' )
+  root_key = rf.read()
+  rf.close()
   sshKeyPath = os.path.join(dagDir, "public_key")
   f = open( sshKeyPath, 'w' )
   logging.debug( "  Writing file " + f.name );
   f.write(userAttrs['SSH public key'] + "\n");
+  f.write( "%s\n" % root_key );
   f.close()
 
   # write dag file
@@ -310,7 +314,7 @@ def isDagRunning( dagDir ):
         cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
         if not cluster_fqdn:
           logging.info( "   No FQDN info available yet" )
-          return false
+          return False
         nodes.append( cluster_fqdn.split(".")[0] )
         numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
         cnodes = ""
@@ -319,19 +323,22 @@ def isDagRunning( dagDir ):
           if not cnodes:
             logging.info( "   No compute nodes info available yet" )
             continue
-          nodes.extend( cnodes.split( "\n" ) )
-        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) )
+          cnodes_array = cnodes.split( "\n" )
+          nodes.extend( cnodes_array )
+        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, " ".join(cnodes_array)) )
       else:
         logging.debug( "  Reading %s" % cluster_info_filename )
         cluster_fqdn = getRegexFromFile( cluster_info_filename, "fqdn=(.*)" )
         nodes.append( cluster_fqdn.split(".")[0] )
         cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
-        nodes.extend( cnodes.split( "\s+" ) )
+        nodes.extend( re.split("\s+", cnodes) )
       frontendFqdn = cluster_fqdn
       resourceinfo += "\n\nFrontend: %s\nNumber of compute nodes: %d" % (cluster_fqdn, len(nodes)-1);
       rocks_status_filename =  os.path.join( vcdir, "rocks_list_host_vm" )
       stdout_f = open( rocks_status_filename, "w" )
-      subprocess.call('ssh %s rocks list host vm status=true' % hostname, stdout=stdout_f, shell=True)
+      ssh = 'ssh %s rocks list host vm status=true' % hostname
+      logging.debug( "  Writing '%s' to %s" % (ssh, rocks_status_filename) )
+      subprocess.call(ssh, stdout=stdout_f, shell=True)
       stdout_f.close()
       for node in nodes:
         status = getRegexFromFile( rocks_status_filename, "(%s:.*active)" % node )
