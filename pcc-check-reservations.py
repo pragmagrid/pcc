@@ -304,7 +304,9 @@ def isDagRunning( dagDir ):
       cluster_info_filename = os.path.join(vcdir, "cluster_info");
       (cluster_fqdn, nodes) = ("", [])
       if not os.path.exists( cluster_info_filename ):
-        subprocess.call('scp %s:%s %s' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir), shell=True)
+        scp = 'scp %s:%s %s' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir)
+        logging.debug( "  %s" % scp )
+        subprocess.call( scp, shell=True)
         cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
         if not cluster_fqdn:
           logging.info( "   No FQDN info available yet" )
@@ -313,13 +315,14 @@ def isDagRunning( dagDir ):
         numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
         cnodes = ""
         if numcpus > 0:
-          cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'cnodes=(.+)' )
+          cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "cnodes='?([^']+)" )
           if not cnodes:
             logging.info( "   No compute nodes info available yet" )
             continue
-          nodes.extend( cnodes.split( "\s+" ) )
+          nodes.extend( cnodes.split( "\n" ) )
         writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) )
       else:
+        logging.debug( "  Reading %s" % cluster_info_filename )
         cluster_fqdn = getRegexFromFile( cluster_info_filename, "fqdn=(.*)" )
         nodes.append( cluster_fqdn.split(".")[0] )
         cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
