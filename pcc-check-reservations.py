@@ -325,13 +325,15 @@ def isDagRunning( dagDir ):
             continue
           cnodes_array = cnodes.split( "\n" )
           nodes.extend( cnodes_array )
-        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, " ".join(cnodes_array)) )
+          cnodes = " ".join(cnodes_array)
+        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) ) 
       else:
         logging.debug( "  Reading %s" % cluster_info_filename )
         cluster_fqdn = getRegexFromFile( cluster_info_filename, "fqdn=(.*)" )
         nodes.append( cluster_fqdn.split(".")[0] )
         cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
-        nodes.extend( re.split("\s+", cnodes) )
+        if len(cnodes) > 0:
+          nodes.extend( re.split("\s+", cnodes) )
       frontendFqdn = cluster_fqdn
       resourceinfo += "\n\nFrontend: %s\nNumber of compute nodes: %d" % (cluster_fqdn, len(nodes)-1);
       rocks_status_filename =  os.path.join( vcdir, "rocks_list_host_vm" )
