@@ -23,6 +23,7 @@ cloud-scheduler.cfg attributes:
 
 from ConfigParser import ConfigParser
 from datetime import datetime
+import glob
 from httplib import HTTPConnection
 import json
 import logging
@@ -49,6 +50,8 @@ rocks_job_dir                  = $jobdir
 JobLeaseDuration             = 7200
 RequestMemory = $memory
 pragma_boot_version          = $version
+username                     = $username
+var_run                      = $var_run
 rocks_should_transfer_files = Yes
 RunAsOwner=True
 queue
@@ -243,7 +246,7 @@ def writeDag( dagDir, data, config, headers ):
     logging.debug( "  Writing file " + f.name );
     dag_f.write( " JOB VC%s  %s\n" % (resource["id"], f.name) )
     s = Template(NODE_TEMPLATE)
-    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], version=resourceAttrs['Pragma_boot version'], memory=reservAttrs['Memory (GB)'], jobdir=dagDir))
+    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], version=resourceAttrs['Pragma_boot version'], username=resourceAttrs['Username'], var_run=resourceAttrs['Temporary directory'], memory=reservAttrs['Memory (GB)'], jobdir=dagDir))
     f.close()
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
@@ -290,7 +293,7 @@ def writeStringToFile( file, aString ):
   f.write( aString )
   return f.close()
 
-def isDagRunning( dagDir ):
+def isDagRunning( dagDir, refNumber ):
   """Check to see if dag is running
 
     Args:
@@ -299,17 +302,22 @@ def isDagRunning( dagDir ):
     Returns:
       bool: True if dag is running, False otherwise.
   """
-  (active,inactive, resourceinfo, frontendFqdn) = ([],[], "", "")
+  (active, inactive, resourceinfo, frontendFqdn) = ([], [], "", "")
   subf = open( os.path.join(dagDir, 'dag.sub'), 'r' )
   for line in subf:
     matched = re.match( ".*\s(\S+)$", line )
     if matched:
       vcdir = os.path.dirname( matched.group(1) )
       hostname = getRegexFromFile( os.path.join(vcdir, "hostname"), "(.*)" )
+      [conf] = glob.glob(os.path.join(vcdir, "*.sub"))
+      username = getRegexFromFile( conf, "username\s*=\s*(.*)" )
+      var_run = getRegexFromFile( conf, "var_run\s*=\s*(.*)" )
+      pragma_boot_version = getRegexFromFile( conf, "pragma_boot_version\s*=\s*(.*)" )
+      remoteDagDir = os.path.join( var_run, "dag-%s" % refNumber )
       cluster_info_filename = os.path.join(vcdir, "cluster_info");
       (cluster_fqdn, nodes) = ("", [])
       if not os.path.exists( cluster_info_filename ):
-        scp = 'scp %s:%s %s >& /dev/null' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir)
+        scp = 'scp %s@%s:%s %s >& /dev/null' % (username, hostname, os.path.join(remoteDagDir,"pragma_boot.log"), vcdir)
         logging.debug( "  %s" % scp )
         subprocess.call( scp, shell=True)
         cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
@@ -344,36 +352,43 @@ def isDagRunning( dagDir ):
         cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
         if len(cnodes) > 0:
           nodes.extend( re.split("\s+", cnodes) )
+
       frontendFqdn = cluster_fqdn
       resourceinfo += "\n\nFrontend: %s\nNumber of compute nodes: %d" % (cluster_fqdn, len(nodes)-1);
-      rocks_status_filename =  os.path.join( vcdir, "rocks_list_host_vm" )
-      stdout_f = open( rocks_status_filename, "w" )
-      ssh = 'ssh %s rocks list host vm status=true' % hostname
-      logging.debug( "  Writing '%s' to %s" % (ssh, rocks_status_filename) )
-      subprocess.call(ssh, stdout=stdout_f, shell=True)
-      stdout_f.close()
-      for node in nodes:
-        status = getRegexFromFile( rocks_status_filename, "(%s:.*active)" % node )
-        logging.debug( "  Checking status of node %s is %s" % (node, status) )
-        if len(status) > 0:
-          active.append(node)
+
+      if pragma_boot_version == "2":
+        frontend = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Allocated cluster (\S+)' )
+        ssh = 'ssh %s@%s /opt/python/bin/python /opt/pragma_boot/bin/pragma list cluster %s' % (username, hostname, frontend)
+        pragma_status_filename =  os.path.join( vcdir, "pragma_list_cluster" )
+        stdout_f = open(pragma_status_filename, "w" )
+        result = subprocess.call(ssh, stdout=stdout_f, shell=True)
+        stdout_f.close()
+        print result
+        if result == 0:
+          active.append(frontend)
         else:
-          inactive.append(node)
+          inactive.append(frontend)
+        f = open(pragma_status_filename, "r")
+        status = f.read()
+        f.close()
+        logging.info("   %s" % status)
+      else:
+        ping = 'ping -c 1 %s >& /dev/null' % cluster_fqdn
+        ping_status = subprocess.call(ping, shell=True)
+        logging.debug( "  Ping to '%s': %i" % (cluster_fqdn, ping_status) )
+        if ping_status == 0:
+          active.append(cluster_fqdn)
+        else:
+          inactive.append(cluster_fqdn)
+  logging.info( "   Active clusters: %s" % str(active) )
+  logging.info( "   Inactive clusters: %s" % str(inactive) )
   subf.close()
-  logging.info( "   Active nodes: %s" % str(active) )
-  logging.info( "   Inactive nodes: %s" % str(inactive) )
-  if len(inactive) == 0:
-    ping = 'ping -c 1 %s >& /dev/null' % cluster_fqdn
-    ping_status = subprocess.call(ping, shell=True)
-    logging.debug( "  Ping to '%s': %i" % (cluster_fqdn, ping_status) )
-    if ping_status != 0:
-      inactive.append(cluster_fqdn)
   if len(inactive) == 0:
     s = Template(EMAIL_STARTED_TEMPLATE)
     return s.substitute(date=str(datetime.now()), resourceinfo=resourceinfo, fqdn=frontendFqdn)
-  return None;
+  return None
 
-def startDagPB( dagDir ):
+def startDagPB( dagDir, refNumber ):
   """Start the dag using pragma_boot directly via SSH
 
     Args:
@@ -389,23 +404,19 @@ def startDagPB( dagDir ):
     matched = re.match( ".*\s(\S+)$", line )
     if matched:
       vcfile = matched.group(1)
-      vcf = open( vcfile, 'r' );
-      vcf_content = vcf.read()
-      vcf.close()
-      matched = re.match( '.*Machine =="([^"]+)".*', vcf_content, re.DOTALL )
-      hostname = matched.group(1)
-
-      #matched = re.search( '.*pragma_boot_version\s*=\s*(\d+)".*', vcf_content, re.DOTALL )
-      matched = re.search( 'pragma_boot_version\s*=\s*(\d+)', vcf_content, re.DOTALL )
-      pragma_boot_version = matched.group(1)
+      hostname = getRegexFromFile( vcfile, 'Machine =="([^"]+)"' )
+      username = getRegexFromFile( vcfile, "username\s*=\s*(.*)" )
+      pragma_boot_version = getRegexFromFile( vcfile, "pragma_boot_version\s*=\s*(\S+)" )
+      var_run = getRegexFromFile( vcfile, "var_run\s*=\s*(\S+)" )
+      remoteDagDir = os.path.join( var_run, "dag-%s" % refNumber )
 
       host_f = open( os.path.join(os.path.dirname(vcfile), "hostname"), 'w' )
       host_f.write( hostname )
       host_f.close()
       if hostname != local_hostname: 
-        logging.debug( "  Copying dir %s over to %s:%s " % (dagDir,hostname, dagDir) )
-        subprocess.call('ssh %s mkdir -p /var/run/pcc' % hostname, shell=True)
-        subprocess.call('scp -r %s %s:%s' % (dagDir, hostname, dagDir), shell=True)
+        logging.debug( "  Copying dir %s over to %s:%s " % (dagDir,hostname, remoteDagDir) )
+        subprocess.call('ssh %s@%s mkdir -p %s' % (username, hostname, var_run), shell=True)
+        subprocess.call('scp -r %s %s@%s:%s >& /dev/null' % (dagDir, username, hostname, remoteDagDir), shell=True)
       vmconf_file = vcfile.replace( '.sub', '.vmconf' )
       vmf = open( vmconf_file, 'r' );
       args = ""
@@ -414,18 +425,21 @@ def startDagPB( dagDir ):
         for line in vmf:
           matched = re.match( "(--\S+)\s+=\s+(.*)", line )
           if matched and matched.group(1) != '--executable' and matched.group(1) != '--logfile':
-            args += " %s=%s" % (matched.group(1), matched.group(2))
-        cmdline = "ssh -f %s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (hostname, dagDir, args, dagDir)
+            value = matched.group(2)
+            value = value.replace(dagDir, remoteDagDir)
+            args += " %s=%s" % (matched.group(1), value)
+        cmdline = "ssh -f %s@%s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (username, hostname, remoteDagDir, args, dagDir)
       elif pragma_boot_version == "2":
         args = {}
         for line in vmf:
           matched = re.match( "--(\S+)\s+=\s+(\S+)", line )
           args[matched.group(1)] = matched.group(2)
-        cmdline = "ssh -f %s 'cd %s; /opt/python/bin/python /opt/pragma_boot/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (hostname, dagDir, args["vcname"], args["num_cpus"], args["key"], args["logfile"], dagDir)
+        args["key"] = args["key"].replace(dagDir, remoteDagDir)
+        cmdline = "ssh -f %s@%s 'cd %s; /opt/python/bin/python /opt/pragma_boot/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (username, hostname, dagDir, args["vcname"], args["num_cpus"], args["key"], args["logfile"], dagDir)
       else:
         logging.error("Error, unknown pragma_boot version %s" % pragma_boot_version)
         sys.exit(1)
-      logging.debug( "  Running pragma_boot: %s: " % cmdline )
+      logging.debug( "  Running pragma_boot: %s" % cmdline )
       subprocess.call(cmdline, shell=True)
   subf.close()
   logging.debug( "  Sleeping 10 seconds" )
@@ -476,7 +490,7 @@ for bookedReservation in bookedReservations.values():
     if startDiff.total_seconds() <= 0: # should be less than
       logging.info( "   Starting reservation at " + str(datetime.now()) )
       dagDir = writeDag( config.get("Server", "dagDir"), data, config, headers )
-      startDagPB( dagDir )
+      startDagPB( dagDir, data["referenceNumber"] )
       s = Template(EMAIL_STARTING_TEMPLATE)
       data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
       updateStatus( data, "starting", config, headers )
@@ -484,7 +498,7 @@ for bookedReservation in bookedReservations.values():
   elif config.get("Status", "starting") == data['statusId']: 
     logging.info( "   Checking status of reservation " )
     dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
-    info = isDagRunning( dagDir )
+    info = isDagRunning( dagDir, data["referenceNumber"] )
     if info:
       logging.info( "   Reservation is running" )
       data['description'] += "\n\n%s" % info
