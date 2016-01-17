@@ -48,6 +48,7 @@ vm_memory                    = $memory
 rocks_job_dir                  = $jobdir
 JobLeaseDuration             = 7200
 RequestMemory = $memory
+pragma_boot_version          = $version
 rocks_should_transfer_files = Yes
 RunAsOwner=True
 queue
@@ -242,7 +243,7 @@ def writeDag( dagDir, data, config, headers ):
     logging.debug( "  Writing file " + f.name );
     dag_f.write( " JOB VC%s  %s\n" % (resource["id"], f.name) )
     s = Template(NODE_TEMPLATE)
-    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], memory=reservAttrs['Memory (Gb/host)'], jobdir=dagDir))
+    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], version=resourceAttrs['Pragma_boot version'], memory=reservAttrs['Memory (GB)'], jobdir=dagDir))
     f.close()
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
@@ -308,22 +309,31 @@ def isDagRunning( dagDir ):
       cluster_info_filename = os.path.join(vcdir, "cluster_info");
       (cluster_fqdn, nodes) = ("", [])
       if not os.path.exists( cluster_info_filename ):
-        scp = 'scp %s:%s %s' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir)
+        scp = 'scp %s:%s %s >& /dev/null' % (hostname, os.path.join(dagDir,"pragma_boot.log"), vcdir)
         logging.debug( "  %s" % scp )
         subprocess.call( scp, shell=True)
         cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
         if not cluster_fqdn:
-          logging.info( "   No FQDN info available yet" )
-          return False
+          cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Found available public IP [\d\.]+ -> (\S+)' )
+          if not cluster_fqdn:
+            logging.info( "   No FQDN info available yet" )
+            return False
         nodes.append( cluster_fqdn.split(".")[0] )
-        numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
+        try:
+          numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
+        except:
+          numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Requesting (\d+) CPUs' ) )
         cnodes = ""
         if numcpus > 0:
-          cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "cnodes='?([^']+)" )
+          try:
+            cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "cnodes='?([^']+)" )
+            cnodes_array = cnodes.split( "\n" )
+          except:
+            cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "Allocated cluster \S+ with compute nodes: (.+)" )
+            cnodes_array = cnodes.split( ", " )
           if not cnodes:
             logging.info( "   No compute nodes info available yet" )
             continue
-          cnodes_array = cnodes.split( "\n" )
           nodes.extend( cnodes_array )
           cnodes = " ".join(cnodes_array)
         writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) ) 
@@ -344,6 +354,7 @@ def isDagRunning( dagDir ):
       stdout_f.close()
       for node in nodes:
         status = getRegexFromFile( rocks_status_filename, "(%s:.*active)" % node )
+        logging.debug( "  Checking status of node %s is %s" % (node, status) )
         if len(status) > 0:
           active.append(node)
         else:
@@ -351,6 +362,12 @@ def isDagRunning( dagDir ):
   subf.close()
   logging.info( "   Active nodes: %s" % str(active) )
   logging.info( "   Inactive nodes: %s" % str(inactive) )
+  if len(inactive) == 0:
+    ping = 'ping -c 1 %s >& /dev/null' % cluster_fqdn
+    ping_status = subprocess.call(ping, shell=True)
+    logging.debug( "  Ping to '%s': %i" % (cluster_fqdn, ping_status) )
+    if ping_status != 0:
+      inactive.append(cluster_fqdn)
   if len(inactive) == 0:
     s = Template(EMAIL_STARTED_TEMPLATE)
     return s.substitute(date=str(datetime.now()), resourceinfo=resourceinfo, fqdn=frontendFqdn)
@@ -373,9 +390,15 @@ def startDagPB( dagDir ):
     if matched:
       vcfile = matched.group(1)
       vcf = open( vcfile, 'r' );
-      matched = re.match( '.*Machine =="([^"]+)".*', vcf.read(), re.DOTALL )
+      vcf_content = vcf.read()
       vcf.close()
+      matched = re.match( '.*Machine =="([^"]+)".*', vcf_content, re.DOTALL )
       hostname = matched.group(1)
+
+      #matched = re.search( '.*pragma_boot_version\s*=\s*(\d+)".*', vcf_content, re.DOTALL )
+      matched = re.search( 'pragma_boot_version\s*=\s*(\d+)', vcf_content, re.DOTALL )
+      pragma_boot_version = matched.group(1)
+
       host_f = open( os.path.join(os.path.dirname(vcfile), "hostname"), 'w' )
       host_f.write( hostname )
       host_f.close()
@@ -386,14 +409,27 @@ def startDagPB( dagDir ):
       vmconf_file = vcfile.replace( '.sub', '.vmconf' )
       vmf = open( vmconf_file, 'r' );
       args = ""
-      for line in vmf:
-        matched = re.match( "(--\S+)\s+=\s+(.*)", line )
-        if matched and matched.group(1) != '--executable' and matched.group(1) != '--logfile':
-          args += " %s=%s" % (matched.group(1), matched.group(2))
-      cmdline = "ssh -f %s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (hostname, dagDir, args, dagDir)
+      cmdline = ""
+      if pragma_boot_version == "1":
+        for line in vmf:
+          matched = re.match( "(--\S+)\s+=\s+(.*)", line )
+          if matched and matched.group(1) != '--executable' and matched.group(1) != '--logfile':
+            args += " %s=%s" % (matched.group(1), matched.group(2))
+        cmdline = "ssh -f %s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (hostname, dagDir, args, dagDir)
+      elif pragma_boot_version == "2":
+        args = {}
+        for line in vmf:
+          matched = re.match( "--(\S+)\s+=\s+(\S+)", line )
+          args[matched.group(1)] = matched.group(2)
+        cmdline = "ssh -f %s 'cd %s; /opt/python/bin/python /opt/pragma_boot/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (hostname, dagDir, args["vcname"], args["num_cpus"], args["key"], args["logfile"], dagDir)
+      else:
+        logging.error("Error, unknown pragma_boot version %s" % pragma_boot_version)
+        sys.exit(1)
       logging.debug( "  Running pragma_boot: %s: " % cmdline )
       subprocess.call(cmdline, shell=True)
   subf.close()
+  logging.debug( "  Sleeping 10 seconds" )
+  time.sleep(10)
   return True
 
 # read input arguments from property file
