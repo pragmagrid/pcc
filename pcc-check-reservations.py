@@ -82,6 +82,18 @@ To access resources, login to the frontend.  E.g.,
 
 """
 
+EMAIL_STOPPING_TEMPLATE = """----- PRAGMA Cloud Scheduler Update @ $date -----
+
+Your resource reservation is being shutdown.
+
+"""
+
+EMAIL_STOPPED_TEMPLATE = """----- PRAGMA Cloud Scheduler Update @ $date -----
+
+Your resource reservation has been shutdown
+
+"""
+
 def query( connection, path, method, params, headers ):
   """Send a REST API request
 
@@ -171,6 +183,25 @@ def updateStatus( data, status, config, headers ):
   (headers, responsedata) = queryBooked( config, "Reservations/"+bookedReservation["referenceNumber"], "POST", updateData, headers )
   logging.debug( "  Server response was: " + responsedata['message'] )
   return responsedata['message'] == 'The reservation was updated'
+
+def runShellCommand( cmd, stdout_filename):
+  """Run bash shell command
+
+    Args:
+      stdout_filename: put stdout in specified filename
+
+    Returns:
+      exit code of cmd
+  """
+
+  stdout_f = open(stdout_filename, "w" )
+  result = subprocess.call(cmd, stdout=stdout_f, shell=True)
+  stdout_f.close()
+
+  f = open(stdout_filename, "r")
+  stdout_text = f.read()
+  f.close()
+  return (result, stdout_text)
 
 def convertAttributesToDict( attrs ):
   """Convert Booked-style attrs to name/value attrs
@@ -363,7 +394,6 @@ def isDagRunning( dagDir, refNumber ):
         stdout_f = open(pragma_status_filename, "w" )
         result = subprocess.call(ssh, stdout=stdout_f, shell=True)
         stdout_f.close()
-        print result
         if result == 0:
           active.append(frontend)
         else:
@@ -446,6 +476,43 @@ def startDagPB( dagDir, refNumber ):
   time.sleep(10)
   return True
 
+def stopDagPB( dagDir, refNumber ):
+  """Stop the dag using pragma_boot directly via SSH
+
+    Args:
+      dagDir(string): Path to directory to store Condor DAGs
+      headers(string): HTTP header info containing auth data
+
+    Returns:
+      bool: True if writes successful, False otherwise.
+  """
+  local_hostname = socket.gethostname()
+  subf = open( os.path.join(dagDir, 'dag.sub'), 'r' )
+  for line in subf:
+    matched = re.match( ".*\s(\S+)$", line )
+    if matched:
+      vcfile = matched.group(1)
+      vcdir = os.path.dirname( matched.group(1) )
+      hostname = getRegexFromFile( vcfile, 'Machine =="([^"]+)"' )
+      username = getRegexFromFile( vcfile, "username\s*=\s*(.*)" )
+      frontend = getRegexFromFile( os.path.join(dagDir,"pragma_boot.log"), 'Allocated cluster (\S+)' )
+      ssh_pragma = "ssh %s@%s /opt/python/bin/python /opt/pragma_boot/bin/pragma" % (username, hostname)
+      shutdown_cmd = "%s shutdown %s" % (ssh_pragma, frontend)
+      logger.debug("  Shutting down %s: %s" % (frontend, shutdown_cmd))
+      (result, stdout_text) = runShellCommand(shutdown_cmd, os.path.join(vcdir, "pragma_shutdown"))
+      if result != 0:
+        logger.error("  Error shutting down virtual cluster %s" % frontend)
+        return False
+      logger.debug("  %s" % stdout_text)
+      clean_cmd = "%s clean %s" % (ssh_pragma, frontend)
+      logger.debug("  Cleaning %s: %s" % (frontend, clean_cmd))
+      (result, stdout_text) = runShellCommand(clean_cmd, os.path.join(vcdir, "pragma_clean"))
+      logger.debug("  %s" % stdout_text)
+      if result != 0:
+        logger.error("  Error cleaning virtual cluster %s" % frontend)
+        return False
+  return True
+
 # read input arguments from property file
 config = ConfigParser()
 config.read("cloud-scheduler.cfg");
@@ -511,12 +578,14 @@ for bookedReservation in bookedReservations.values():
   # else Reservation is running and needs to be shut down
   elif ( config.get("Status", "running") == data['statusId'] and endDiff.total_seconds() <= reservationSecsLeft ):
     logging.debug( "  Reservation has expired; shutting down cluster" )
+    s = Template(EMAIL_STOPPING_TEMPLATE)
+    data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
     updateStatus(data, "stopping",config, headers )
-  # else Reservation is stopping but time hasn't expired yet
-  elif config.get("Status", "stopping") == data['statusId']: 
-    # <insert check if pcc is done>
-    logging.info( "   PCC has finished shutting down " + str(datetime.now()) )
-    updateStatus( data, "created", config, headers ) 
+    dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
+    if stopDagPB(dagDir, data["referenceNumber"]):
+      s = Template(EMAIL_STOPPED_TEMPLATE)
+      data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
+      updateStatus( data, "created", config, headers ) 
   # else reservation is active/future and unknown state
   else:
     logging.debug( "  Reservation in unknown state to PCC" )
