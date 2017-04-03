@@ -24,7 +24,7 @@ cloud-scheduler.cfg attributes:
 from ConfigParser import ConfigParser
 from datetime import datetime
 import glob
-from httplib import HTTPConnection
+from httplib import HTTPSConnection
 import json
 import logging
 from logging.handlers import TimedRotatingFileHandler
@@ -32,6 +32,7 @@ import os
 import re
 from string import Template
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -50,6 +51,8 @@ rocks_job_dir                  = $jobdir
 JobLeaseDuration             = 7200
 RequestMemory = $memory
 pragma_boot_version          = $version
+pragma_boot_path             = $pragma_boot_path
+python_path                  = $python_path
 username                     = $username
 var_run                      = $var_run
 rocks_should_transfer_files = Yes
@@ -131,7 +134,7 @@ def queryBooked( config, function, method, params, headers ):
       dict: contains Booked auth info
       JSON object: response from server
   """
-  connection = HTTPConnection( config.get("Server", "hostname") )
+  connection = HTTPSConnection( config.get("Server", "hostname"), context=ssl._create_unverified_context() )
   connection.connect()
 
   if headers == None:
@@ -277,7 +280,9 @@ def writeDag( dagDir, data, config, headers ):
     logging.debug( "  Writing file " + f.name );
     dag_f.write( " JOB VC%s  %s\n" % (resource["id"], f.name) )
     s = Template(NODE_TEMPLATE)
-    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], version=resourceAttrs['Pragma_boot version'], username=resourceAttrs['Username'], var_run=resourceAttrs['Temporary directory'], memory=reservAttrs['Memory (GB)'], jobdir=dagDir))
+    # optional params
+    python_path = "" if resourceAttrs['Python path'] is None else resourceAttrs['Python path']
+    f.write(s.substitute(id=resource["id"], host=resourceAttrs['Site hostname'], pragma_boot_path=resourceAttrs['Pragma_boot path'], python_path=python_path, version=resourceAttrs['Pragma_boot version'], username=resourceAttrs['Username'], var_run=resourceAttrs['Temporary directory'], memory=reservAttrs['Memory (GB)'], jobdir=dagDir))
     f.close()
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".vmconf"), 'w')
     logging.debug( "  Writing file " + f.name );
@@ -300,7 +305,7 @@ def getRegexFromFile( file, regex ):
       list: Args returned from regex
   """
   f = open( file, "r" )
-  matcher = re.compile( regex, re.MULTILINE );
+  matcher = re.compile( regex, re.MULTILINE )
   matched = matcher.search( f.read() )
   f.close()
   if not matched:
@@ -343,79 +348,64 @@ def isDagRunning( dagDir, refNumber ):
       [conf] = glob.glob(os.path.join(vcdir, "*.sub"))
       username = getRegexFromFile( conf, "username\s*=\s*(.*)" )
       var_run = getRegexFromFile( conf, "var_run\s*=\s*(.*)" )
+      pragma_boot_path = getRegexFromFile( conf, "pragma_boot_path\s*=\s*(.*)" )
+      python_path = getRegexFromFile( conf, "python_path\s*=\s*?(\S*?)$" )
       pragma_boot_version = getRegexFromFile( conf, "pragma_boot_version\s*=\s*(.*)" )
       remoteDagDir = os.path.join( var_run, "dag-%s" % refNumber )
       cluster_info_filename = os.path.join(vcdir, "cluster_info");
       (cluster_fqdn, nodes) = ("", [])
-      if not os.path.exists( cluster_info_filename ):
+
+      if pragma_boot_version == "2":
         scp = 'scp %s@%s:%s %s >& /dev/null' % (username, hostname, os.path.join(remoteDagDir,"pragma_boot.log"), vcdir)
         logging.debug( "  %s" % scp )
         subprocess.call( scp, shell=True)
-        cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'fqdn=(\S+)*' )
-        if not cluster_fqdn:
-          cluster_fqdn = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Found available public IP [\d\.]+ -> (\S+)' )
-          if not cluster_fqdn:
-            logging.info( "   No FQDN info available yet" )
-            return False
-        nodes.append( cluster_fqdn.split(".")[0] )
-        try:
-          numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'numcpus=(.+)' ) )
-        except:
-          numcpus = int(getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Requesting (\d+) CPUs' ) )
-        cnodes = ""
-        if numcpus > 0:
-          try:
-            cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "cnodes='?([^']+)" )
-            cnodes_array = cnodes.split( "\n" )
-          except:
-            cnodes = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), "Allocated cluster \S+ with compute nodes: (.+)" )
-            cnodes_array = cnodes.split( ", " )
-          if not cnodes:
-            logging.info( "   No compute nodes info available yet" )
-            continue
-          nodes.extend( cnodes_array )
-          cnodes = " ".join(cnodes_array)
-        writeStringToFile( os.path.join(vcdir, "cluster_info"), "fqdn=%s\ncnodes=%s" % (cluster_fqdn, cnodes) ) 
-      else:
-        logging.debug( "  Reading %s" % cluster_info_filename )
-        cluster_fqdn = getRegexFromFile( cluster_info_filename, "fqdn=(.*)" )
-        nodes.append( cluster_fqdn.split(".")[0] )
-        cnodes = getRegexFromFile( cluster_info_filename, "cnodes=(.*)" )
-        if len(cnodes) > 0:
-          nodes.extend( re.split("\s+", cnodes) )
-
-      frontendFqdn = cluster_fqdn
-      resourceinfo += "\n\nFrontend: %s\nNumber of compute nodes: %d" % (cluster_fqdn, len(nodes)-1);
-
-      if pragma_boot_version == "2":
         frontend = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Allocated cluster (\S+)' )
-        ssh = 'ssh %s@%s /opt/python/bin/python /opt/pragma_boot/bin/pragma list cluster %s' % (username, hostname, frontend)
+        if not frontend:
+          frontend = getRegexFromFile( os.path.join(vcdir,"pragma_boot.log"), 'Successfully deployed frontend (\S+)' )
+        ssh = 'ssh %s@%s %s %s/bin/pragma list cluster %s' % (username, hostname, python_path, pragma_boot_path, frontend)
         pragma_status_filename =  os.path.join( vcdir, "pragma_list_cluster" )
         stdout_f = open(pragma_status_filename, "w" )
         result = subprocess.call(ssh, stdout=stdout_f, shell=True)
         stdout_f.close()
-        if result == 0:
+        f = open(pragma_status_filename, "r")
+        status = f.readlines()
+        f.close()
+	status.pop(0) # discard header
+        isRunning = True
+        runningMatcher = re.compile("Running|active")
+        ipMatcher = re.compile("([\d\.]+)\s*$")
+        publicIP = None
+        for line in status:
+          if not runningMatcher.search(line):
+            isRunning = False
+          else:
+            matched = ipMatcher.search(line)
+            if matched:
+              publicIP = matched.group(1)
+        accessible = False
+        if publicIP:
+          logging.info("   Found public IP %s" % publicIP)
+          ssh = 'echo | nc -w 30 %s 22 2>&1 | grep SSH > /dev/null 2>&1' % (publicIP)
+          result = subprocess.call(ssh, shell=True)
+          if result == 0:
+            logging.info("   SSH is active on %s" % publicIP)
+            accessible = True
+          else:
+            logging.info("   SSH is not yet active on %s" % publicIP)
+        if isRunning and accessible:
           active.append(frontend)
         else:
           inactive.append(frontend)
-        f = open(pragma_status_filename, "r")
-        status = f.read()
-        f.close()
         logging.info("   %s" % status)
       else:
-        ping = 'ping -c 1 %s >& /dev/null' % cluster_fqdn
-        ping_status = subprocess.call(ping, shell=True)
-        logging.debug( "  Ping to '%s': %i" % (cluster_fqdn, ping_status) )
-        if ping_status == 0:
-          active.append(cluster_fqdn)
-        else:
-          inactive.append(cluster_fqdn)
+        logging.error("Error, unknown or unsupported pragma_boot version %s" % pragma_boot_version)
+        sys.exit(1)
   logging.info( "   Active clusters: %s" % str(active) )
   logging.info( "   Inactive clusters: %s" % str(inactive) )
   subf.close()
   if len(inactive) == 0:
     s = Template(EMAIL_STARTED_TEMPLATE)
-    return s.substitute(date=str(datetime.now()), resourceinfo=resourceinfo, fqdn=frontendFqdn)
+    return s.substitute(date=str(datetime.now()), resourceinfo=resourceinfo, fqdn=publicIP)
   return None
 
 def startDagPB( dagDir, refNumber ):
@@ -436,6 +426,8 @@ def startDagPB( dagDir, refNumber ):
       vcfile = matched.group(1)
       hostname = getRegexFromFile( vcfile, 'Machine =="([^"]+)"' )
       username = getRegexFromFile( vcfile, "username\s*=\s*(.*)" )
+      pragma_boot_path = getRegexFromFile( vcfile, "pragma_boot_path\s*=\s*(\S+)" )
+      python_path = getRegexFromFile( vcfile, "python_path\s*=\s*?(\S*?)$" )
       pragma_boot_version = getRegexFromFile( vcfile, "pragma_boot_version\s*=\s*(\S+)" )
       var_run = getRegexFromFile( vcfile, "var_run\s*=\s*(\S+)" )
       remoteDagDir = os.path.join( var_run, "dag-%s" % refNumber )
@@ -451,23 +443,16 @@ def startDagPB( dagDir, refNumber ):
       vmf = open( vmconf_file, 'r' );
       args = ""
       cmdline = ""
-      if pragma_boot_version == "1":
-        for line in vmf:
-          matched = re.match( "(--\S+)\s+=\s+(.*)", line )
-          if matched and matched.group(1) != '--executable' and matched.group(1) != '--logfile':
-            value = matched.group(2)
-            value = value.replace(dagDir, remoteDagDir)
-            args += " %s=%s" % (matched.group(1), value)
-        cmdline = "ssh -f %s@%s 'cd %s; /opt/pragma_boot/bin/pragma_boot %s' >& %s/ssh.out" % (username, hostname, remoteDagDir, args, dagDir)
-      elif pragma_boot_version == "2":
+      if pragma_boot_version == "2":
         args = {}
         for line in vmf:
           matched = re.match( "--(\S+)\s+=\s+(\S+)", line )
           args[matched.group(1)] = matched.group(2)
         args["key"] = args["key"].replace(dagDir, remoteDagDir)
-        cmdline = "ssh -f %s@%s 'cd %s; /opt/python/bin/python /opt/pragma_boot/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (username, hostname, dagDir, args["vcname"], args["num_cpus"], args["key"], args["logfile"], dagDir)
+        args["logfile"] = args["logfile"].replace(dagDir, remoteDagDir)
+        cmdline = "ssh -f %s@%s 'cd %s; %s %s/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (username, hostname, remoteDagDir, python_path, pragma_boot_path, args["vcname"], args["num_cpus"], args["key"], args["logfile"], dagDir)
       else:
-        logging.error("Error, unknown pragma_boot version %s" % pragma_boot_version)
+        logging.error("Error, unknown or unsupported pragma_boot version %s" % pragma_boot_version)
         sys.exit(1)
       logging.debug( "  Running pragma_boot: %s" % cmdline )
       subprocess.call(cmdline, shell=True)
@@ -495,8 +480,10 @@ def stopDagPB( dagDir, refNumber ):
       vcdir = os.path.dirname( matched.group(1) )
       hostname = getRegexFromFile( vcfile, 'Machine =="([^"]+)"' )
       username = getRegexFromFile( vcfile, "username\s*=\s*(.*)" )
+      pragma_boot_path = getRegexFromFile( vcfile, "pragma_boot_path\s*=\s*(\S+)" )
+      python_path = getRegexFromFile( vcfile, "python_path\s*=\s*?(\S*?)$" )
       frontend = getRegexFromFile( os.path.join(dagDir,"pragma_boot.log"), 'Allocated cluster (\S+)' )
-      ssh_pragma = "ssh %s@%s /opt/python/bin/python /opt/pragma_boot/bin/pragma" % (username, hostname)
+      ssh_pragma = "ssh %s@%s %s %s/bin/pragma" % (username, hostname, python, pragma_boot_path)
       shutdown_cmd = "%s shutdown %s" % (ssh_pragma, frontend)
       logger.debug("  Shutting down %s: %s" % (frontend, shutdown_cmd))
       (result, stdout_text) = runShellCommand(shutdown_cmd, os.path.join(vcdir, "pragma_shutdown"))
