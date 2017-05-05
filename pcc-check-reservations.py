@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/opt/python/bin/python
 
 """pcc-check-reservations.py
 
@@ -36,8 +36,9 @@ import ssl
 import subprocess
 import sys
 import time
+import urllib
 
-ISO_FORMAT="%Y-%m-%dT%H:%M:%S" 
+ISO_FORMAT="%Y-%m-%d %H:%M:%S" 
 ISO_LENGTH=19
 
 NODE_TEMPLATE = """
@@ -110,7 +111,9 @@ def query( connection, path, method, params, headers ):
     Returns:
       JSON object: response from server
   """
-  connection.request( method, path, json.dumps(params), headers )
+  if headers is None:
+    headers = {}
+  connection.request( method, path, urllib.urlencode(params), headers )
   response = connection.getresponse()
   if response.status != 200:
     sys.stderr.write( "Problem querying " + path + ": " + response.reason )
@@ -120,8 +123,8 @@ def query( connection, path, method, params, headers ):
   return json.loads( responsestring )
 
 
-def queryBooked( config, function, method, params, headers ):
-  """Send a Booked REST API request
+def queryGUI( config, function, method, params, headers ):
+  """Send a GUI API request
 
     Args:
       config(ConfigParser): Config file input data
@@ -142,12 +145,11 @@ def queryBooked( config, function, method, params, headers ):
         "username": config.get("Authentication", "username"), 
         "password": config.get("Authentication", "password") 
     }
-    authUrl = config.get("Server", "baseUrl") + "Authentication/Authenticate"
+    authUrl = config.get("Server", "baseUrl") + "signIn.py"
     session = query( connection, authUrl, "POST", creds, {} )
-    headers = { 
-      "X-Booked-SessionToken": session['sessionToken'], 
-      "X-Booked-UserId": session['userId']
-    }
+    if params is None:
+      params = {}
+    params["session_id"] = session["session_id"]
 
   url = config.get("Server", "baseUrl") + function 
   data = query( connection, url, method, params, headers )
@@ -183,7 +185,7 @@ def updateStatus( data, status, config, headers ):
     reformattedResources.append(resource['id'])
   updateData['resources'] = reformattedResources
   updateData['statusId'] = config.get( "Status", status )
-  (headers, responsedata) = queryBooked( config, "Reservations/"+bookedReservation["referenceNumber"], "POST", updateData, headers )
+  (headers, responsedata) = queryGUI( config, "Reservations/"+bookedReservation["referenceNumber"], "POST", updateData, headers )
   logging.debug( "  Server response was: " + responsedata['message'] )
   return responsedata['message'] == 'The reservation was updated'
 
@@ -244,7 +246,7 @@ def writeDag( dagDir, data, config, headers ):
   reservAttrs = convertAttributesToDict( data['customAttributes'] )
 
   # get user info
-  (headers, userdata) = queryBooked( config, "/Users/"+data['owner']['userId'], "GET", None, headers );
+  (headers, userdata) = queryGUI( config, "/Users/"+data['owner']['userId'], "GET", None, headers );
   userAttrs = convertAttributesToDict( userdata['customAttributes'] )
 
   # make dag dir and write user's key to disk
@@ -274,7 +276,7 @@ def writeDag( dagDir, data, config, headers ):
       logging.debug( "  Creating dag node directory " + dagNodeDir )
       os.mkdir(dagNodeDir)
     # get resource info
-    (headers, resourcedata) = queryBooked( config, "/Resources/"+resource["id"], "GET", None, headers );
+    (headers, resourcedata) = queryGUI( config, "/Resources/"+resource["id"], "GET", None, headers );
     resourceAttrs = convertAttributesToDict( resourcedata['customAttributes'] )
     f = open(os.path.join(dagNodeDir,"vc"+resource["id"]+".sub"), 'w')
     logging.debug( "  Writing file " + f.name );
@@ -500,6 +502,8 @@ def stopDagPB( dagDir, refNumber ):
         return False
   return True
 
+# main
+
 # read input arguments from property file
 config = ConfigParser()
 config.read("cloud-scheduler.cfg");
@@ -507,73 +511,79 @@ reservationSecsLeft = int( config.get( "Stopping", "reservationSecsLeft" ) );
 
 # configure logging 
 logger = logging.getLogger()
-logger.setLevel( config.get("Logging", "level") )
-handler = TimedRotatingFileHandler(
-  config.get("Logging", "file"), when="W0", interval=1, backupCount=5
-)
-handler.setFormatter(
-  logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-)
-logger.addHandler(handler)
+#logger.setLevel( config.get("Logging", "level") )
+#handler = TimedRotatingFileHandler(
+#  config.get("Logging", "file"), when="W0", interval=1, backupCount=5
+#)
+#handler.setFormatter(
+#  logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+#)
+#logger.addHandler(handler)
+logging.basicConfig(
+		format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+		level=config.get("Logging", "level"))
 
 # Examine all reservations and determine which require actions
 logging.debug( "Reading current and future reservations" )
-(headers, data) = queryBooked( config, "Reservations/", "GET", None, None );
+(headers, data) = queryGUI( config, "/getAllReservations.py", "POST", None, None );
 
 # if reservation contains more than one resource, one entry is returned for
 # each; we just need one
 bookedReservations = {}
-for bookedReservation in data["reservations"]:
-  bookedReservations[bookedReservation['referenceNumber']] = bookedReservation
+for bookedReservation in data["result"]:
+  bookedReservations[bookedReservation['reservation_id']] = bookedReservation
+
+print bookedReservations
 
 # Iterate thru unique reservations
 for bookedReservation in bookedReservations.values():
-  (headers, data) = queryBooked( config, "Reservations/"+bookedReservation["referenceNumber"], "GET", None, headers );
   # Gather reservation data info
-  logging.debug( "Reservation: ref=%s, status=%s, resourceId=%s" % (bookedReservation["referenceNumber"], data['statusId'], data['resourceId']) )
-  startTime = datetime.strptime( data['startDateTime'][:ISO_LENGTH], ISO_FORMAT )
-  endTime = datetime.strptime( data['endDateTime'][:ISO_LENGTH], ISO_FORMAT )
+  for site in bookedReservation["sites"]:
+    logging.debug( "Reservation: ref=%s, status=%s, resourceId=%s" % (bookedReservation["reservation_id"], site['status'], site['site_name']) )
+  startTime = datetime.strptime( bookedReservation['begin'][:ISO_LENGTH], ISO_FORMAT )
+  endTime = datetime.strptime( bookedReservation['end'][:ISO_LENGTH], ISO_FORMAT )
   now = datetime.now()
-  logging.debug( "  Start: " + data['startDateTime'] + ", End: " + data['endDateTime'] ) 
+  logging.debug( "  Start: " + bookedReservation['begin'] + ", End: " + bookedReservation['end'] ) 
   startDiff = startTime - now
   endDiff = endTime - now
 
-  # Reservation needs to be started
-  if ( config.get("Status", "created") == data['statusId'] ):
-    logging.debug( "  Reservation should be started in: " + str(startDiff) )
-    if startDiff.total_seconds() <= 0: # should be less than
-      logging.info( "   Starting reservation at " + str(datetime.now()) )
-      dagDir = writeDag( config.get("Server", "dagDir"), data, config, headers )
-      startDagPB( dagDir, data["referenceNumber"] )
-      s = Template(EMAIL_STARTING_TEMPLATE)
-      data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
-      updateStatus( data, "starting", config, headers )
-  # else Reservation is starting
-  elif config.get("Status", "starting") == data['statusId']: 
-    logging.info( "   Checking status of reservation " )
-    dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
-    info = isDagRunning( dagDir, data["referenceNumber"] )
-    if info:
-      logging.info( "   Reservation is running" )
-      data['description'] += "\n\n%s" % info
-      updateStatus( data, "running", config, headers ) 
-  # else Reservation is running
-  elif ( config.get("Status", "running") == data['statusId'] and endDiff.total_seconds() > reservationSecsLeft ):
-    # <insert pcc check to make sure is true>
-    shutdownTime = endDiff.total_seconds() - reservationSecsLeft
-    logging.debug( "  Reservation scheduled to be shut down in %s or %d secs" % (str(endDiff), shutdownTime) )
-  # else Reservation is running and needs to be shut down
-  elif ( config.get("Status", "running") == data['statusId'] and endDiff.total_seconds() <= reservationSecsLeft ):
-    logging.debug( "  Reservation has expired; shutting down cluster" )
-    s = Template(EMAIL_STOPPING_TEMPLATE)
-    data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
-    updateStatus(data, "stopping",config, headers )
-    dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
-    if stopDagPB(dagDir, data["referenceNumber"]):
-      s = Template(EMAIL_STOPPED_TEMPLATE)
-      data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
-      updateStatus( data, "created", config, headers ) 
-  # else reservation is active/future and unknown state
-  else:
-    logging.debug( "  Reservation in unknown state to PCC" )
+  for site in bookedReservation["sites"]:
+    # Reservation needs to be started
+    if site['status'] == 'waiting':
+      logging.debug( "  Reservation should be started in: " + str(startDiff) )
+      if startDiff.total_seconds() <= 0: # should be less than
+        logging.info( "   Starting reservation at " + str(datetime.now()) )
+        dagDir = writeDag( config.get("Server", "dagDir"), data, config, headers )
+        #startDagPB( dagDir, data["referenceNumber"] )
+        #s = Template(EMAIL_STARTING_TEMPLATE)
+        #data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
+        #updateStatus( data, "starting", config, headers )
+    # else Reservation is starting
+    elif site['status'] == 'starting': 
+      logging.info( "   Checking status of reservation " )
+      dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
+      #info = isDagRunning( dagDir, data["referenceNumber"] )
+      #if info:
+      #  logging.info( "   Reservation is running" )
+      #  data['description'] += "\n\n%s" % info
+      #  updateStatus( data, "running", config, headers ) 
+    # else Reservation is running
+    elif ( site['status'] == 'running' and endDiff.total_seconds() > reservationSecsLeft ):
+      # <insert pcc check to make sure is true>
+      shutdownTime = endDiff.total_seconds() - reservationSecsLeft
+      logging.debug( "  Reservation scheduled to be shut down in %s or %d secs" % (str(endDiff), shutdownTime) )
+    # else Reservation is running and needs to be shut down
+    elif ( site['status'] == 'running' and endDiff.total_seconds() <= reservationSecsLeft ):
+      logging.debug( "  Reservation has expired; shutting down cluster" )
+      #s = Template(EMAIL_STOPPING_TEMPLATE)
+      #data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
+      #updateStatus(data, "stopping",config, headers )
+      #dagDir = os.path.join( config.get("Server", "dagDir"), "dag-" + data["referenceNumber"] )
+      #if stopDagPB(dagDir, data["referenceNumber"]):
+      #  s = Template(EMAIL_STOPPED_TEMPLATE)
+      #  data['description'] += "\n\n%s" % s.substitute(date=str(datetime.now()))
+      #  updateStatus( data, "created", config, headers ) 
+    # else reservation is active/future and unknown state
+    else:
+      logging.debug( "  Reservation in unknown state to PCC" )
 
