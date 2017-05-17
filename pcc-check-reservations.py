@@ -71,7 +71,7 @@ VMCONF_TEMPLATE = """--executable      = pragma_boot
 """
 # --enable-ipop-server=http://nbcr-224.ucsd.edu/ipop/exchange.php?jobId=$jobid
 
-RESERVATION_TEMPLATE = """Dear $userFirst
+RESERVATION_TEMPLATE = """Dear $userFirst,
 
 Your PRAGMA Cloud reservation has been updated.  Please see details below.
 
@@ -653,7 +653,7 @@ for reservation in data["result"]:
 
   if site_status_changes:
     s = Template(RESERVATION_TEMPLATE)
-    mailbody = s.substitute(userFirst=userdata['firstname'],
+    mailbody = s.substitute(userFirst=userdata['firstname'].capitalize(),
                             reservation_id=reservation['reservation_id'],
                             title=reservation['title'],
                             description=reservation['description'],
