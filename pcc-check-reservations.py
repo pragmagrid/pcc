@@ -211,6 +211,7 @@ class Reservation:
     'waiting': 'created',
     'created': 'starting',
     'starting': 'running',
+    'cancel': 'stopped',
     'running': 'stopped',
     'stopping': 'stopping',
     'stopped': 'stopped'
