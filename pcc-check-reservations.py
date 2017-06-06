@@ -225,7 +225,7 @@ class Reservation:
     logging.info("Reservation: ref=%s" % reservation["reservation_id"])
     start = datetime.strptime(reservation['begin'][:ISO_LENGTH], ISO_FORMAT)
     end = datetime.strptime(reservation['end'][:ISO_LENGTH], ISO_FORMAT)
-    now = datetime.now()
+    now = datetime.utcnow()
     logging.info(
       "  Start: %s, End %s" % (reservation['begin'], reservation['end']))
     self.start_diff = start - now
@@ -262,7 +262,7 @@ class Reservation:
   def starting(self, site, site_desc):
     logging.debug("  Reservation should be started in: " + str(self.start_diff))
     if self.start_diff.total_seconds() <= 0:  # should be less than
-      logging.info("   Starting reservation at " + str(datetime.now()))
+      logging.info("   Starting reservation at " + str(datetime.utcnow()))
       self.dag.write(reservation, userdata, site, site_desc)
       self.dag.start()
       return True, None
@@ -432,6 +432,7 @@ class Dag:
             username, hostname, python_path, pragma_boot_path, frontend)
           pragma_status_filename = os.path.join(vcdir, "pragma_list_cluster")
           stdout_f = open(pragma_status_filename, "w")
+          logging.debug("  %s" % ssh)
           result = subprocess.call(ssh, stdout=stdout_f, shell=True)
           stdout_f.close()
           f = open(pragma_status_filename, "r")
@@ -631,7 +632,7 @@ client.authenticate()
 
 # Examine all reservations and determine which require actions
 logging.debug("Reading current and future reservations")
-data = client.query("getAllReservations.py", "POST", None)
+data = client.query("pccGetAllReservations.py", "POST", None)
 
 site_descriptions = {}
 
@@ -645,12 +646,15 @@ for reservation in data["result"]:
   for site in reservation["sites"]:
 
     site_was_status = site['status']
-    site_now_status, res_update = res.handle_reservation_site(site)
-    if res_update:
-      reservation = res_update
-    if site_now_status is not None and site_now_status != site_was_status:
-      site_status_changes[site['site_id']] = {
-        'was': site_was_status, 'now': site_now_status}
+    try:
+      site_now_status, res_update = res.handle_reservation_site(site)
+      if res_update:
+        reservation = res_update
+      if site_now_status is not None and site_now_status != site_was_status:
+        site_status_changes[site['site_id']] = {
+          'was': site_was_status, 'now': site_now_status}
+    except Exception as e:
+      logging.exception("  Error processing reservation: %s" % res.reservation['reservation_id'])
 
   if site_status_changes:
     s = Template(RESERVATION_TEMPLATE)
@@ -679,7 +683,7 @@ for reservation in data["result"]:
     msg['Subject'] = 'Update: PRAGMA Cloud Scheduler reservation #%s' % \
                      reservation['reservation_id']
     msg['From'] = 'root@%s' % config.get("Server", "hostname")
-    msg['To'] = 'ssmallen@sdsc.edu'
+    msg['To'] = userdata['email_address']
 
     s = smtplib.SMTP('localhost')
     s.sendmail(msg['From'], [msg['To']], msg.as_string())
