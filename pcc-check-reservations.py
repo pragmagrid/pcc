@@ -285,7 +285,7 @@ class Reservation:
       logging.debug(
         "  Reservation scheduled to be shut down in %s or %d secs" % (
           str(res.end_diff), shutdownTime))
-      return False
+      return False, None
     else:
       logging.info("  Reservation has expired; shutting down cluster")
       self.client.update_status(self.reservation, site, "stopping", "--")
