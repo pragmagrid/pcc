@@ -66,6 +66,7 @@ queue
 VMCONF_TEMPLATE = """--executable      = pragma_boot
 --key             = $sshKeyPath
 --num_cpus       = $cpus       
+--mem             = $mem
 --vcname          = $vcname
 --logfile         = $jobdir/pragma_boot.log
 """
@@ -278,7 +279,7 @@ class Reservation:
 
   def stopped(self, site, site_desc):
     if site['status'] == 'stopped':  # already stopped
-      return
+      return False, None
     elif self.end_diff.total_seconds() > self.shutdown_secs:
       # <insert pcc check to make sure is true>
       shutdownTime = self.end_diff.total_seconds() - self.shutdown_secs
@@ -387,7 +388,7 @@ class Dag:
       s = Template(VMCONF_TEMPLATE)
       f.write(s.substitute(cpus=site['CPU'], vcname=reservation['image_type'],
                            sshKeyPath=sshKeyPath, jobdir=self.dag_dir,
-                           jobid=os.getpid()))
+                           jobid=os.getpid(), mem=site['memory']))
       f.close()
 
     # close out dag file
@@ -518,12 +519,14 @@ class Dag:
           for line in vmf:
             matched = re.match("--(\S+)\s+=\s+(\S+)", line)
             args[matched.group(1)] = matched.group(2)
+          # pragma_boot takes memory per node so divide memory by num nodes (computes + frontend)
+          mem_per_node = 1024 * round(int(args["mem"]) / (int(args["num_cpus"]) + 1.0))
           args["key"] = args["key"].replace(self.dag_dir, remote_dag_dir)
           args["logfile"] = args["logfile"].replace(self.dag_dir, remote_dag_dir)
-          cmdline = "ssh -f %s@%s 'cd %s; %s %s/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s' >& %s/ssh.out" % (
+          cmdline = "ssh -f %s@%s 'cd %s; %s %s/bin/pragma boot %s %s key=%s loglevel=DEBUG logfile=%s mem=%i' >& %s/ssh.out" % (
             username, hostname, remote_dag_dir, python_path, pragma_boot_path,
             args["vcname"], args["num_cpus"], args["key"], args["logfile"],
-            self.dag_dir)
+            mem_per_node, self.dag_dir)
         else:
           logging.error(
             "Error, unknown or unsupported pragma_boot version %s" % pragma_boot_version)
